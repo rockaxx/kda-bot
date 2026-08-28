@@ -277,3 +277,30 @@ docs/superpowers/specs/2026-08-28-space-aces-npc-bot-design.md
 
 The locally supplied `game.js` remains ignored reference material and is never
 packaged into or committed with the extension.
+
+## Implementation checkpoints
+
+### Phase 1 — Dry Run diagnostic foundation
+
+Phase 1 ends with a loadable Chrome extension that is locked to client
+`1.9.0.045`, exposes six narrowly fingerprinted client roots, displays the
+closed-shadow in-game panel, validates settings, and exports only a bounded,
+sanitized diagnostic. Planner and controller decisions exist and are covered
+by synthetic tests, but their actions are recorded only as `would-*`. No mouse,
+keyboard, target-selection, or movement event is emitted to the game.
+
+The Phase 1 runtime checkpoint requires the user to load the unpacked extension,
+confirm that the adapter reports supported, and export
+`local-diagnostics/sa-bot-diagnostic-1.9.0.045.json`. Until that evidence is
+captured, the implementation is locally verified but not live-browser verified.
+
+### Phase 2 — Live snapshot and action adapter
+
+Phase 2 inspects the exported summaries for `input`, `ui`, `user`, `camera`,
+`world`, and `renderer`, then maps exact runtime fields to the normalized
+snapshot contract. A separate reviewed plan will define every live action hook
+and supervised activation gate. The original full-system requirements remain:
+strict NPC-only targeting, manual travel and wrong-map waiting, edge-first
+selection, all-nearby-NPC path safety, common kite distance, low-HP retreat,
+passive full repair, re-engagement, fail-closed version handling, rate limits,
+immediate stop, and staged supervised validation before unattended use.

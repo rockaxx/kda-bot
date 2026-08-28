@@ -11,3 +11,6 @@ logs/
 .env
 .env.*
 
+# Sanitized exports can still contain account-specific runtime identifiers.
+local-diagnostics/
+sa-bot-diagnostic-*.json
