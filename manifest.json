@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Space Aces NPC Bot",
+  "version": "0.1.0",
+  "minimum_chrome_version": "111",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://steam.space-aces.com/gameNew*"],
+      "js": ["src/namespace.js", "src/source-patch.js", "src/page-adapter.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://steam.space-aces.com/gameNew*"],
+      "js": [
+        "src/namespace.js",
+        "src/schemas.js",
+        "src/settings.js",
+        "src/geometry.js",
+        "src/planner.js",
+        "src/controller.js",
+        "src/logger.js",
+        "src/bridge.js",
+        "src/overlay.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ]
+}
