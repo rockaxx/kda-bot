@@ -1,0 +1,13 @@
+# Locally supplied, decrypted Space Aces client reference.
+game.js
+game-dist*.js
+
+# Dependencies, build output, logs, and local browser state.
+node_modules/
+dist/
+coverage/
+logs/
+*.log
+.env
+.env.*
+
