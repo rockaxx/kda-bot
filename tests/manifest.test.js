@@ -24,6 +24,11 @@ test("manifest is scoped to the game and has no sensitive permissions", () => {
   assert.equal(JSON.stringify(manifest).includes("game.js"), false);
   assert.equal(JSON.stringify(manifest).includes("cookies"), false);
   assert.equal(JSON.stringify(manifest).includes("webRequest"), false);
+  assert.equal(
+    manifest.content_scripts.every((entry) => entry.run_at === "document_start"),
+    true,
+    "both worlds must listen before the one-shot diagnostic"
+  );
 });
 
 test("every declared script exists", () => {
