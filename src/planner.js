@@ -9,7 +9,7 @@
 })(typeof window === "object" ? window : null, function createApi(geometry) {
   "use strict";
 
-  const { distance, isPathClear } = geometry;
+  const { distance, isPathClear, pointOnCircle } = geometry;
 
   function isBlacklisted(blacklist, id, now) {
     return (blacklist.get(id) || 0) > now;
@@ -76,5 +76,118 @@
     return scored.length ? scored[0].candidate : null;
   }
 
-  return { selectEdgeNpc };
+  function isInsideBounds(point, bounds) {
+    return (
+      !bounds ||
+      (point.x >= bounds.minX &&
+        point.x <= bounds.maxX &&
+        point.y >= bounds.minY &&
+        point.y <= bounds.maxY)
+    );
+  }
+
+  function clampToBounds(point, bounds) {
+    if (!bounds) return point;
+    return {
+      x: Math.max(bounds.minX, Math.min(bounds.maxX, point.x)),
+      y: Math.max(bounds.minY, Math.min(bounds.maxY, point.y))
+    };
+  }
+
+  function planKitePoint(
+    player,
+    target,
+    entities,
+    settings,
+    previousPoint,
+    bounds
+  ) {
+    const hazards = entities.filter(
+      (entity) =>
+        entity.type === "npc" && entity.alive && entity.id !== target.id
+    );
+    const candidates = [];
+
+    for (let index = 0; index < 32; index += 1) {
+      const point = pointOnCircle(
+        target,
+        settings.kiteDistance,
+        (index * 2 * Math.PI) / 32
+      );
+      if (!isInsideBounds(point, bounds)) continue;
+      if (!isPathClear(player, point, hazards, settings.dangerRadius)) {
+        continue;
+      }
+      const distances = hazards.map((hazard) => distance(point, hazard));
+      if (distances.some((value) => value <= settings.dangerRadius)) {
+        continue;
+      }
+      const minimumDistance = distances.length
+        ? Math.min(...distances)
+        : 100000;
+      const score =
+        minimumDistance -
+        0.25 * distance(player, point) -
+        (previousPoint ? 0.1 * distance(previousPoint, point) : 0);
+      candidates.push({ index, point, score });
+    }
+
+    candidates.sort(
+      (left, right) => right.score - left.score || left.index - right.index
+    );
+    if (!candidates.length) {
+      return { status: "unsafe", reason: "no-safe-kite-point" };
+    }
+    return {
+      status: "safe",
+      point: candidates[0].point,
+      reason: "safe-kite-point",
+      score: candidates[0].score
+    };
+  }
+
+  function planFleePoint(player, entities, settings, bounds) {
+    const nearby = entities.filter(
+      (entity) =>
+        entity.type === "npc" &&
+        entity.alive &&
+        distance(player, entity) <= 3 * settings.dangerRadius
+    );
+    if (!nearby.length) {
+      return { status: "unsafe", reason: "no-nearby-npc-direction" };
+    }
+
+    const centroid = nearby.reduce(
+      (sum, entity) => ({
+        x: sum.x + entity.x / nearby.length,
+        y: sum.y + entity.y / nearby.length
+      }),
+      { x: 0, y: 0 }
+    );
+    let dx = player.x - centroid.x;
+    let dy = player.y - centroid.y;
+    let magnitude = Math.hypot(dx, dy);
+    if (magnitude === 0) {
+      dx = -1;
+      dy = 0;
+      magnitude = 1;
+    }
+    const point = clampToBounds(
+      {
+        x: player.x + (dx / magnitude) * 2 * settings.kiteDistance,
+        y: player.y + (dy / magnitude) * 2 * settings.kiteDistance
+      },
+      bounds
+    );
+    if (
+      nearby.some(
+        (entity) => distance(point, entity) <= settings.dangerRadius
+      )
+    ) {
+      return { status: "unsafe", reason: "flee-point-still-dangerous" };
+    }
+    return { status: "safe", point, reason: "away-from-npc-centroid" };
+  }
+
+  return { planFleePoint, planKitePoint, selectEdgeNpc };
 });
