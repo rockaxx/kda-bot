@@ -37,9 +37,7 @@
         settings,
         settingsValid: normalized.ok,
         settingsErrors: normalized.errors,
-        adapterSupported:
-          diagnostic?.patchStatus === "patched" &&
-          diagnostic?.clientVersion === api.EXPECTED_CLIENT_VERSION,
+        adapterSupported: api.isSupportedDiagnostic(diagnostic),
         hasSnapshot: Boolean(snapshot),
         diagnostic,
         snapshot,

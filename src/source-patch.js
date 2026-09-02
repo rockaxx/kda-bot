@@ -23,19 +23,22 @@
 
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
-    const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
-    if (buildMarkers.length !== 1) {
-      return unsupported(source, "version-marker-mismatch");
-    }
     if (!REQUIRED_ROOT_MARKERS.every((marker) => source.includes(marker))) {
       return unsupported(source, "root-fingerprint-mismatch");
     }
+    const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
+    if (buildMarkers.length > 1) {
+      return unsupported(source, "version-marker-ambiguous");
+    }
 
-    const version = buildMarkers[0][2];
+    const version = buildMarkers.length === 1 ? buildMarkers[0][2] : null;
+    const versionExpression = version
+      ? `"${version}"`
+      : 'String(window.FETCH_V||window.WORKER_V||"unknown")';
     const exposure =
       'if(!Object.prototype.hasOwnProperty.call(window,"__SA_BOT_ROOTS__")){' +
       'Object.defineProperty(window,"__SA_BOT_ROOTS__",{configurable:true,value:Object.freeze({' +
-      `version:"${version}",` +
+      `version:${versionExpression},` +
       'get input(){return _0x229c50;},' +
       'get ui(){return _0x594165;},' +
       'get user(){return _0x22a0bf;},' +
@@ -43,14 +46,17 @@
       'get world(){return _0x429744;},' +
       'get renderer(){return _0x607b9;}' +
       '})});}';
+    const insertionIndex = buildMarkers.length === 1
+      ? buildMarkers[0].index + buildMarkers[0][0].length
+      : 0;
     return {
       status: "patched",
       source:
-        source.slice(0, buildMarkers[0].index + buildMarkers[0][0].length) +
+        source.slice(0, insertionIndex) +
         exposure +
-        source.slice(buildMarkers[0].index + buildMarkers[0][0].length),
+        source.slice(insertionIndex),
       version,
-      reason: "recognized-client"
+      reason: version ? "recognized-client" : "recognized-structural-client"
     };
   }
 

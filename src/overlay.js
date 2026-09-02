@@ -21,6 +21,10 @@
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
   }
 
+  function isSupportedDiagnostic(diagnostic) {
+    return Boolean(diagnostic && diagnostic.patchStatus === "patched");
+  }
+
   function whenDocumentReady(documentRef, callback) {
     if (documentRef.readyState === "loading") {
       documentRef.addEventListener("DOMContentLoaded", callback, { once: true });
@@ -188,6 +192,7 @@
   return {
     canStartDryRun,
     createOverlay,
+    isSupportedDiagnostic,
     keepHostMounted,
     whenDocumentReady
   };

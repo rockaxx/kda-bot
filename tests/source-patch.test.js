@@ -29,6 +29,15 @@ test("accepts a renamed version variable when the structural roots match", () =>
   assert.match(result.source, /version:"1\.9\.0\.046"/);
 });
 
+test("uses runtime build version when structurally matching source has no literal", () => {
+  const result = patchGameSource(roots);
+
+  assert.equal(result.status, "patched");
+  assert.equal(result.version, null);
+  assert.equal(result.reason, "recognized-structural-client");
+  assert.match(result.source, /window\.FETCH_V/);
+});
+
 test("leaves unknown versions byte-identical", () => {
   const source = "const version='2.0.0';";
   const result = patchGameSource(source);

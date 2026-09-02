@@ -2,9 +2,21 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   canStartDryRun,
+  isSupportedDiagnostic,
   keepHostMounted,
   whenDocumentReady
 } = require("../src/overlay.js");
+
+test("structurally patched runtime diagnostic enables the adapter gate", () => {
+  assert.equal(
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.8.9.099" }),
+    true
+  );
+  assert.equal(
+    isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.8.9.099" }),
+    false
+  );
+});
 
 test("Dry Run starts only with valid settings, supported adapter, and snapshot", () => {
   assert.equal(canStartDryRun({ settingsValid: true, adapterSupported: true, hasSnapshot: true }), true);
