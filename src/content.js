@@ -5,14 +5,17 @@
   const api = root.__SA_BOT_ISOLATED_V1__;
   let pendingSnapshot = null;
   let pendingDiagnostic = null;
+  let pendingSource = null;
   let receiveSnapshot = (value) => { pendingSnapshot = value; };
   let receiveDiagnostic = (value) => { pendingDiagnostic = value; };
+  let receiveSource = (value) => { pendingSource = value; };
   let cleanup = () => bridge.stop();
   let unloaded = false;
   const bridge = api.createBridge({
     windowRef: root,
     onSnapshot(value) { receiveSnapshot(value); },
-    onDiagnostic(value) { receiveDiagnostic(value); }
+    onDiagnostic(value) { receiveDiagnostic(value); },
+    onSource(value) { receiveSource(value); }
   });
   bridge.start();
 
@@ -29,6 +32,7 @@
     let controller = api.createController({ settings });
     const logger = api.createLogger(100);
     let diagnostic = null;
+    let clientSource = null;
     let snapshot = null;
     let active = false;
 
@@ -40,6 +44,7 @@
         adapterSupported: api.isSupportedDiagnostic(diagnostic),
         hasSnapshot: Boolean(snapshot),
         diagnostic,
+        clientSource,
         snapshot,
         state: controller.getState(),
         entries: logger.list(),
@@ -99,14 +104,13 @@
         render();
       },
       onExport() {
-        if (!diagnostic) return;
-        const blob = new Blob([JSON.stringify(diagnostic, null, 2)], {
-          type: "application/json"
-        });
+        const file = api.createExportFile({ clientSource, diagnostic });
+        if (!file) return;
+        const blob = new Blob([file.content], { type: file.type });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `sa-bot-diagnostic-${diagnostic.clientVersion || "unknown"}.json`;
+        anchor.download = file.filename;
         anchor.click();
         URL.revokeObjectURL(url);
       }
@@ -129,9 +133,20 @@
       });
       render();
     };
+    receiveSource = (value) => {
+      clientSource = value.source;
+      logger.add("source", {
+        state: "captured",
+        bytes: new TextEncoder().encode(clientSource).byteLength,
+        reason: value.reason
+      });
+      render();
+    };
     if (pendingDiagnostic) receiveDiagnostic(pendingDiagnostic);
+    if (pendingSource) receiveSource(pendingSource);
     if (pendingSnapshot) receiveSnapshot(pendingSnapshot);
     pendingDiagnostic = null;
+    pendingSource = null;
     pendingSnapshot = null;
     render();
     cleanup = () => {

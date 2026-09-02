@@ -92,3 +92,31 @@ test("bridge accepts only bounded plain-JSON diagnostics", () => {
   send({ invalid: undefined });
   assert.deepEqual(diagnostics, [{ patchStatus: "patched" }]);
 });
+
+test("bridge accepts bounded client source and rejects oversized source", () => {
+  const windowRef = fakeWindow();
+  const sources = [];
+  const bridge = createBridge({
+    windowRef,
+    onSnapshot: () => {},
+    onDiagnostic: () => {},
+    onSource: (value) => sources.push(value)
+  });
+  bridge.start();
+  const send = (source) => windowRef.listeners.message({
+    source: windowRef,
+    data: {
+      channel: "sa-bot-v1",
+      direction: "source",
+      payload: { reason: "root-fingerprint-mismatch", source }
+    }
+  });
+
+  send("const currentClient = true;");
+  send("x".repeat(5 * 1024 * 1024 + 1));
+
+  assert.deepEqual(sources, [{
+    reason: "root-fingerprint-mismatch",
+    source: "const currentClient = true;"
+  }]);
+});

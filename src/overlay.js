@@ -25,6 +25,22 @@
     return Boolean(diagnostic && diagnostic.patchStatus === "patched");
   }
 
+  function createExportFile({ clientSource, diagnostic }) {
+    if (typeof clientSource === "string" && clientSource.length > 0) {
+      return {
+        content: clientSource,
+        filename: "space-aces-client-current.js",
+        type: "application/javascript"
+      };
+    }
+    if (!diagnostic) return null;
+    return {
+      content: JSON.stringify(diagnostic, null, 2),
+      filename: `sa-bot-diagnostic-${diagnostic.clientVersion || "unknown"}.json`,
+      type: "application/json"
+    };
+  }
+
   function whenDocumentReady(documentRef, callback) {
     if (documentRef.readyState === "loading") {
       documentRef.addEventListener("DOMContentLoaded", callback, { once: true });
@@ -165,7 +181,10 @@
       }
       startButton.disabled = !canStartDryRun(model) || Boolean(model.active);
       stopButton.disabled = !model.active;
-      exportButton.disabled = !model.diagnostic;
+      exportButton.disabled = !model.diagnostic && !model.clientSource;
+      exportButton.textContent = model.clientSource
+        ? "Export client source"
+        : "Export diagnostic";
       errors.textContent = (model.settingsErrors || []).join("\n");
       const snapshot = model.snapshot;
       statusValues.fsm.textContent = `${model.state?.name || "STOPPED"} (${model.state?.reason || "—"})`;
@@ -191,6 +210,7 @@
 
   return {
     canStartDryRun,
+    createExportFile,
     createOverlay,
     isSupportedDiagnostic,
     keepHostMounted,

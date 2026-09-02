@@ -14,3 +14,4 @@ logs/
 # Sanitized exports can still contain account-specific runtime identifiers.
 local-diagnostics/
 sa-bot-diagnostic-*.json
+space-aces-client-current.js

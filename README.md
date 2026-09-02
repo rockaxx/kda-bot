@@ -50,17 +50,25 @@ the Phase 1 diagnostic checkpoint.
 2. Set kite distance, all-NPC danger radius, flee/resume HP percentages, ammo
    key, intervals, and blacklist duration.
 3. Click **Save settings**. Invalid values appear under the buttons.
-4. Click **Export diagnostic** after the adapter row reports `supported`.
-5. Create `C:\Users\Alex\Desktop\SA BOT\local-diagnostics` and move the
-   downloaded file there as
-   `sa-bot-diagnostic-1.9.0.045.json`.
-6. Send that local file for Phase 2 mapping. Do not commit or publicly share it;
+4. If the client fingerprint is recognized, click **Export diagnostic** after
+   the adapter row reports `supported`.
+5. If live obfuscation changed, the button becomes **Export client source**.
+   Click it and keep the downloaded file as `space-aces-client-current.js`.
+6. Create `C:\Users\Alex\Desktop\SA BOT\local-diagnostics` and move the
+   downloaded JSON or JS file there.
+7. Send that local file for Phase 2 mapping. Do not commit or publicly share it;
    sanitized runtime structures may still contain account-specific IDs.
 
 The export contains only bounded, sanitized summaries of six client roots:
 `input`, `ui`, `user`, `camera`, `world`, and `renderer`. Keys resembling auth,
 tokens, cookies, sessions, chat, messages, payloads, sockets, email, passwords,
 or credentials are removed.
+
+The client-source fallback is used only after an obfuscation change prevents
+those six roots from being identified. It captures the already decrypted
+JavaScript Blob locally, keeps at most 5 MB in extension memory, and downloads
+it only after the user clicks Export. It is never uploaded by the extension and
+is ignored by Git.
 
 ## Rollback
 

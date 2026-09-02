@@ -24,22 +24,41 @@
         if (!isJavaScript) return Reflect.construct(target, args, newTarget);
 
         const result = patcher(parts[0]);
-        onStatus(result);
+        onStatus(result, parts[0]);
         const nextParts = result.status === "patched" ? [result.source] : parts;
         return Reflect.construct(target, [nextParts, options], newTarget);
       }
     });
   }
 
+  function publishDiagnostic(windowRef, diagnostic, clientSource) {
+    windowRef.postMessage(
+      { channel: "sa-bot-v1", direction: "diagnostic", payload: diagnostic },
+      "*"
+    );
+    if (typeof clientSource === "string" && clientSource.length > 0) {
+      windowRef.postMessage(
+        {
+          channel: "sa-bot-v1",
+          direction: "source",
+          payload: { reason: diagnostic.reason, source: clientSource }
+        },
+        "*"
+      );
+    }
+  }
+
   function install() {
     if (!root || typeof root.Blob !== "function") return;
     let patchStatus = { status: "waiting", version: null, reason: "waiting" };
+    let capturedSource = null;
     const NativeBlob = root.Blob;
     root.Blob = createPatchedBlobConstructor(
       NativeBlob,
       sourcePatch.patchGameSource,
-      (status) => {
+      (status, originalSource) => {
         patchStatus = status;
+        capturedSource = originalSource;
       }
     );
 
@@ -64,19 +83,16 @@
           }
         }
       }
-      root.postMessage(
+      publishDiagnostic(
+        root,
         {
-          channel: "sa-bot-v1",
-          direction: "diagnostic",
-          payload: {
-            clientVersion: roots ? roots.version : patchStatus.version,
-            patchStatus: roots ? "patched" : patchStatus.status,
-            reason: roots ? "recognized-client" : patchStatus.reason || "timeout",
-            pathname: root.location ? root.location.pathname : "",
-            roots: summaries
-          }
+          clientVersion: roots ? roots.version : patchStatus.version,
+          patchStatus: roots ? "patched" : patchStatus.status,
+          reason: roots ? "recognized-client" : patchStatus.reason || "timeout",
+          pathname: root.location ? root.location.pathname : "",
+          roots: summaries
         },
-        "*"
+        capturedSource
       );
     }
 
@@ -90,5 +106,5 @@
   }
 
   install();
-  return { createPatchedBlobConstructor };
+  return { createPatchedBlobConstructor, publishDiagnostic };
 });

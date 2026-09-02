@@ -10,6 +10,7 @@
   "use strict";
 
   const MAX_DIAGNOSTIC_BYTES = 200 * 1024;
+  const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 
   function isPlainJson(value, seen = new WeakSet()) {
     if (value === null) return true;
@@ -27,7 +28,12 @@
     return new TextEncoder().encode(JSON.stringify(value)).byteLength;
   }
 
-  function createBridge({ windowRef, onSnapshot, onDiagnostic }) {
+  function createBridge({
+    windowRef,
+    onSnapshot,
+    onDiagnostic,
+    onSource = () => {}
+  }) {
     let listening = false;
 
     function handleMessage(event) {
@@ -38,6 +44,18 @@
       if (envelope.direction === "snapshot") {
         const result = schemas.validateEnvelope(envelope, "snapshot");
         if (result.ok) onSnapshot(result.value.payload);
+        return;
+      }
+      if (envelope.direction === "source") {
+        const payload = envelope.payload;
+        if (
+          !schemas.isPlainObject(payload) ||
+          typeof payload.reason !== "string" ||
+          typeof payload.source !== "string" ||
+          payload.source.length === 0 ||
+          serializedSize(payload) > MAX_SOURCE_BYTES
+        ) return;
+        onSource({ reason: payload.reason, source: payload.source });
         return;
       }
       if (envelope.direction !== "diagnostic" || !isPlainJson(envelope.payload)) return;
@@ -60,5 +78,5 @@
     return { start, stop };
   }
 
-  return { createBridge, MAX_DIAGNOSTIC_BYTES };
+  return { createBridge, MAX_DIAGNOSTIC_BYTES, MAX_SOURCE_BYTES };
 });

@@ -2,10 +2,25 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   canStartDryRun,
+  createExportFile,
   isSupportedDiagnostic,
   keepHostMounted,
   whenDocumentReady
 } = require("../src/overlay.js");
+
+test("client source export takes priority over fallback diagnostic JSON", () => {
+  assert.deepEqual(
+    createExportFile({
+      clientSource: "const live = true;",
+      diagnostic: { clientVersion: null }
+    }),
+    {
+      content: "const live = true;",
+      filename: "space-aces-client-current.js",
+      type: "application/javascript"
+    }
+  );
+});
 
 test("structurally patched runtime diagnostic enables the adapter gate", () => {
   assert.equal(

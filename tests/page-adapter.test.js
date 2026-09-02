@@ -1,7 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  createPatchedBlobConstructor
+  createPatchedBlobConstructor,
+  publishDiagnostic
 } = require("../src/page-adapter.js");
 const { patchGameSource } = require("../src/source-patch.js");
 
@@ -47,4 +48,26 @@ test("Blob proxy preserves non-JavaScript parts", () => {
 
   assert.equal(blob.parts, parts);
   assert.deepEqual(blob.options, { type: "text/plain" });
+});
+
+test("diagnostic publisher includes captured client source separately", () => {
+  const messages = [];
+  const windowRef = {
+    postMessage(message, target) {
+      assert.equal(target, "*");
+      messages.push(message);
+    }
+  };
+
+  publishDiagnostic(
+    windowRef,
+    { patchStatus: "unsupported", reason: "root-fingerprint-mismatch" },
+    "const liveClient = true;"
+  );
+
+  assert.deepEqual(messages.map((message) => message.direction), [
+    "diagnostic",
+    "source"
+  ]);
+  assert.equal(messages[1].payload.source, "const liveClient = true;");
 });
