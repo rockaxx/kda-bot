@@ -30,11 +30,11 @@
 - Consumes: decrypted client source string.
 - Produces: `patchGameSource(source)` exposing six version-specific roots through `window.__SA_BOT_ROOTS__`.
 
-- [ ] **Step 1: Write failing test** for current root markers and exact exposed symbols.
-- [ ] **Step 2: Run** `node --test tests/source-patch.test.js`; expect current-client case to fail with `unsupported`.
-- [ ] **Step 3: Add minimal version-specific fingerprint table** for `1.9.0.045` and `1.9.0.049`.
-- [ ] **Step 4: Run test**; expect all source-patch tests PASS.
-- [ ] **Step 5: Commit** fingerprint change.
+- [x] **Step 1: Write failing test** for current root markers and exact exposed symbols.
+- [x] **Step 2: Run** `node --test tests/source-patch.test.js`; expect current-client case to fail with `unsupported`.
+- [x] **Step 3: Add minimal version-specific fingerprint table** for `1.9.0.045` and `1.9.0.049`.
+- [x] **Step 4: Run test**; expect all source-patch tests PASS.
+- [x] **Step 5: Commit** fingerprint change.
 
 ### Task 2: Snapshot normalization and publication
 
@@ -46,12 +46,12 @@
 - Consumes: roots `{ version, user, world }`; `world.MAP_SHIPS` is a `Map`; ship fields `x`, `y`, `HP`, `maxHp[config]`, `targetID`, `destroyed`, `isAttacking`; entity fields `isNpc`, `x`, `y`, `HP`, `maxHp[config]`, `destroyed`.
 - Produces: `createSnapshot(roots, timestamp)` and `publishSnapshot(windowRef, snapshot)`.
 
-- [ ] **Step 1: Write failing tests** for a valid snapshot, strict NPC-only filtering, HP clamping, current NPC target, and missing-root rejection.
-- [ ] **Step 2: Run** `node --test tests/page-adapter.test.js`; expect missing API failures.
-- [ ] **Step 3: Implement pure normalizer** using only known data fields; return `null` unless map/player core state is valid.
-- [ ] **Step 4: Add 100 ms publisher loop** after roots become available; diagnostic still publishes once.
-- [ ] **Step 5: Run page-adapter tests**; expect PASS.
-- [ ] **Step 6: Commit** snapshot adapter change.
+- [x] **Step 1: Write failing tests** for a valid snapshot, strict NPC-only filtering, HP clamping, current NPC target, and missing-root rejection.
+- [x] **Step 2: Run** `node --test tests/page-adapter.test.js`; expect missing API failures.
+- [x] **Step 3: Implement pure normalizer** using only known data fields; return `null` unless map/player core state is valid.
+- [x] **Step 4: Add 100 ms publisher loop** after roots become available; diagnostic still publishes once.
+- [x] **Step 5: Run page-adapter tests**; expect PASS.
+- [x] **Step 6: Commit** snapshot adapter change.
 
 ### Task 3: Current-version controller gate and full verification
 
@@ -64,9 +64,9 @@
 - Consumes: snapshots whose `clientVersion` is `1.9.0.049`.
 - Produces: normal DRY RUN FSM decisions and `would-*` entries.
 
-- [ ] **Step 1: Write failing controller test** proving current client version does not fault.
-- [ ] **Step 2: Run** `node --test tests/controller.test.js`; expect `unsupported-client-version` failure.
-- [ ] **Step 3: Change expected client version** to `1.9.0.049` and document current DRY RUN behavior.
-- [ ] **Step 4: Run** `npm test` and `npm run check`; expect zero failures/errors.
-- [ ] **Step 5: Review diff** for source bundle, secrets, active actions, or unrelated files.
-- [ ] **Step 6: Commit** current-version gate and docs.
+- [x] **Step 1: Write failing controller test** proving current client version does not fault.
+- [x] **Step 2: Run** `node --test tests/controller.test.js`; expect `unsupported-client-version` failure.
+- [x] **Step 3: Change expected client version** to `1.9.0.049` and document current DRY RUN behavior.
+- [x] **Step 4: Run** `npm test` and `npm run check`; expect zero failures/errors.
+- [x] **Step 5: Review diff** for source bundle, secrets, active actions, or unrelated files.
+- [x] **Step 6: Commit** current-version gate and docs.
