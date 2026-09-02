@@ -8,11 +8,41 @@
   const CLIENT_VERSION = "1.9.0.045";
   const BUILD_MARKER_PATTERN =
     /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
-  const REQUIRED_ROOT_MARKERS = Object.freeze([
-    "_0x429744['mapId']",
-    "_0x22a0bf['ship']",
-    "_0x607b9['gamepadTargeter']",
-    "_0x229c50['initListeners']"
+  const CLIENT_FINGERPRINTS = Object.freeze([
+    Object.freeze({
+      markers: Object.freeze([
+        "_0x8541dd['mapId']",
+        "_0x3d592['ship']",
+        "_0x5d1a8d['gamepadTargeter']",
+        "_0xc13e48['initListeners']",
+        "_0x1e1267['followX']",
+        "_0x313249['handleWriteLog']"
+      ]),
+      roots: Object.freeze({
+        input: "_0xc13e48",
+        ui: "_0x313249",
+        user: "_0x3d592",
+        camera: "_0x1e1267",
+        world: "_0x8541dd",
+        renderer: "_0x5d1a8d"
+      })
+    }),
+    Object.freeze({
+      markers: Object.freeze([
+        "_0x429744['mapId']",
+        "_0x22a0bf['ship']",
+        "_0x607b9['gamepadTargeter']",
+        "_0x229c50['initListeners']"
+      ]),
+      roots: Object.freeze({
+        input: "_0x229c50",
+        ui: "_0x594165",
+        user: "_0x22a0bf",
+        camera: "_0x1ceb4c",
+        world: "_0x429744",
+        renderer: "_0x607b9"
+      })
+    })
   ]);
   const SENSITIVE_KEY =
     /token|cookie|session|auth|password|email|chat|message|payload|socket|credential/i;
@@ -23,7 +53,10 @@
 
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
-    if (!REQUIRED_ROOT_MARKERS.every((marker) => source.includes(marker))) {
+    const fingerprint = CLIENT_FINGERPRINTS.find(({ markers }) =>
+      markers.every((marker) => source.includes(marker))
+    );
+    if (!fingerprint) {
       return unsupported(source, "root-fingerprint-mismatch");
     }
     const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
@@ -39,12 +72,12 @@
       'if(!Object.prototype.hasOwnProperty.call(window,"__SA_BOT_ROOTS__")){' +
       'Object.defineProperty(window,"__SA_BOT_ROOTS__",{configurable:true,value:Object.freeze({' +
       `version:${versionExpression},` +
-      'get input(){return _0x229c50;},' +
-      'get ui(){return _0x594165;},' +
-      'get user(){return _0x22a0bf;},' +
-      'get camera(){return _0x1ceb4c;},' +
-      'get world(){return _0x429744;},' +
-      'get renderer(){return _0x607b9;}' +
+      `get input(){return ${fingerprint.roots.input};},` +
+      `get ui(){return ${fingerprint.roots.ui};},` +
+      `get user(){return ${fingerprint.roots.user};},` +
+      `get camera(){return ${fingerprint.roots.camera};},` +
+      `get world(){return ${fingerprint.roots.world};},` +
+      `get renderer(){return ${fingerprint.roots.renderer};}` +
       '})});}';
     const insertionIndex = buildMarkers.length === 1
       ? buildMarkers[0].index + buildMarkers[0][0].length

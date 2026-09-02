@@ -11,6 +11,12 @@ const roots =
   "_0x429744['mapId'];_0x22a0bf['ship'];" +
   "_0x607b9['gamepadTargeter'];_0x229c50['initListeners'];";
 
+const currentRoots =
+  "let _0xc13e48,_0x313249,_0x3d592,_0x1e1267,_0x8541dd,_0x5d1a8d;" +
+  "_0x8541dd['mapId'];_0x3d592['ship'];" +
+  "_0x5d1a8d['gamepadTargeter'];_0xc13e48['initListeners'];" +
+  "_0x1e1267['followX'];_0x313249['handleWriteLog'];";
+
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
 
@@ -27,6 +33,21 @@ test("accepts a renamed version variable when the structural roots match", () =>
   assert.equal(result.status, "patched");
   assert.equal(result.version, "1.9.0.046");
   assert.match(result.source, /version:"1\.9\.0\.046"/);
+});
+
+test("patches current client with its exact six root symbols", () => {
+  const result = patchGameSource(
+    `const _0xcurrent='1.9.0.049';${currentRoots}`
+  );
+
+  assert.equal(result.status, "patched");
+  assert.equal(result.version, "1.9.0.049");
+  assert.match(result.source, /get input\(\).*_0xc13e48/s);
+  assert.match(result.source, /get ui\(\).*_0x313249/s);
+  assert.match(result.source, /get user\(\).*_0x3d592/s);
+  assert.match(result.source, /get camera\(\).*_0x1e1267/s);
+  assert.match(result.source, /get world\(\).*_0x8541dd/s);
+  assert.match(result.source, /get renderer\(\).*_0x5d1a8d/s);
 });
 
 test("uses runtime build version when structurally matching source has no literal", () => {
