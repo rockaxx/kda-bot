@@ -89,3 +89,20 @@ test("diagnostic summary never calls functions and catches throwing getters", ()
   assert.equal(summary.action, "[function]");
   assert.equal(summary.broken, "[unavailable]");
 });
+
+test("diagnostic summary always produces JSON-safe primitive values", () => {
+  const summary = summarizeRoot({
+    missing: undefined,
+    large: 123n,
+    marker: Symbol("x"),
+    invalidNumber: Number.NaN
+  });
+
+  assert.doesNotThrow(() => JSON.stringify(summary));
+  assert.deepEqual(summary, {
+    missing: "[undefined]",
+    large: "[bigint]",
+    marker: "[symbol]",
+    invalidNumber: "[invalid-number]"
+  });
+});

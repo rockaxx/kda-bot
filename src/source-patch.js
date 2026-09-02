@@ -68,7 +68,13 @@
     let keyCount = 0;
 
     function visit(current, depth) {
+      if (current === undefined) return "[undefined]";
       if (typeof current === "function") return "[function]";
+      if (typeof current === "bigint") return "[bigint]";
+      if (typeof current === "symbol") return "[symbol]";
+      if (typeof current === "number" && !Number.isFinite(current)) {
+        return "[invalid-number]";
+      }
       if (current === null || typeof current !== "object") return current;
       if (depth > maxDepth) return "[depth-limit]";
       if (seen.has(current)) return "[circular]";
