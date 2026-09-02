@@ -48,6 +48,133 @@
     }
   }
 
+  function percentage(current, maximum) {
+    const value = Number(current);
+    const max = Number(maximum);
+    if (!Number.isFinite(value) || !Number.isFinite(max) || max <= 0) {
+      return null;
+    }
+    return Math.round(Math.max(0, Math.min(100, (value / max) * 100)) * 10) / 10;
+  }
+
+  function entityAlive(entity, hpPercent) {
+    return entity.destroyed !== true && hpPercent > 0;
+  }
+
+  function createSnapshot(roots, timestamp = Date.now()) {
+    try {
+      const user = roots && roots.user;
+      const world = roots && roots.world;
+      const ship = user && user.ship;
+      const ships = world && world.MAP_SHIPS;
+      const mapId = Number(world && world.mapId);
+      const playerId = user && user.userID;
+      const playerHp = ship && percentage(ship.HP, ship.maxHp && ship.maxHp[ship.config]);
+      if (
+        !ship ||
+        typeof ships.forEach !== "function" ||
+        !Number.isInteger(mapId) ||
+        mapId < 1 ||
+        (!Number.isInteger(playerId) &&
+          !(typeof playerId === "string" && playerId.length > 0)) ||
+        !Number.isFinite(Number(ship.x)) ||
+        !Number.isFinite(Number(ship.y)) ||
+        playerHp === null
+      ) {
+        return null;
+      }
+
+      const entities = [];
+      ships.forEach((entity, id) => {
+        if (!entity || entity.isNpc !== true) return;
+        const hpPercent = percentage(
+          entity.HP,
+          entity.maxHp && entity.maxHp[entity.config]
+        );
+        if (
+          (!Number.isInteger(id) && !(typeof id === "string" && id.length > 0)) ||
+          !Number.isFinite(Number(entity.x)) ||
+          !Number.isFinite(Number(entity.y)) ||
+          hpPercent === null
+        ) return;
+        entities.push({
+          id,
+          type: "npc",
+          x: Number(entity.x),
+          y: Number(entity.y),
+          hpPercent,
+          alive: entityAlive(entity, hpPercent)
+        });
+      });
+
+      let target = null;
+      if (ship.targetID !== null && ship.targetID !== undefined && ship.targetID !== 0) {
+        const targetEntity = typeof ships.get === "function"
+          ? ships.get(ship.targetID)
+          : null;
+        if (targetEntity) {
+          const targetHp = percentage(
+            targetEntity.HP,
+            targetEntity.maxHp && targetEntity.maxHp[targetEntity.config]
+          );
+          target = {
+            id: ship.targetID,
+            type: targetEntity.isNpc === true ? "npc" : "player",
+            alive: targetHp !== null && entityAlive(targetEntity, targetHp)
+          };
+        } else {
+          target = { id: ship.targetID, type: "object", alive: false };
+        }
+      }
+
+      const speed = ship.speed;
+      const moving = Boolean(
+        speed &&
+        (Number(speed.x) !== 0 || Number(speed.y) !== 0)
+      );
+      return {
+        timestamp,
+        clientVersion: String(roots.version || "unknown").replace(/^n/, ""),
+        connectionState: "connected",
+        mapId,
+        player: {
+          id: playerId,
+          x: Number(ship.x),
+          y: Number(ship.y),
+          hpPercent: playerHp,
+          alive: entityAlive(ship, playerHp),
+          moving,
+          inCombat: ship.isAttacking === true
+        },
+        target,
+        entities
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function publishSnapshot(windowRef, snapshot) {
+    windowRef.postMessage(
+      { channel: "sa-bot-v1", direction: "snapshot", payload: snapshot },
+      "*"
+    );
+  }
+
+  function startSnapshotPublisher(
+    windowRef,
+    roots,
+    intervalMs = 100,
+    now = Date.now
+  ) {
+    const send = () => {
+      const snapshot = createSnapshot(roots, now());
+      if (snapshot) publishSnapshot(windowRef, snapshot);
+    };
+    send();
+    return windowRef.setInterval(send, intervalMs);
+  }
+
   function install() {
     if (!root || typeof root.Blob !== "function") return;
     let patchStatus = { status: "waiting", version: null, reason: "waiting" };
@@ -82,6 +209,7 @@
             summaries[name] = "[unavailable]";
           }
         }
+        startSnapshotPublisher(root, roots);
       }
       publishDiagnostic(
         root,
@@ -106,5 +234,11 @@
   }
 
   install();
-  return { createPatchedBlobConstructor, publishDiagnostic };
+  return {
+    createPatchedBlobConstructor,
+    createSnapshot,
+    publishDiagnostic,
+    publishSnapshot,
+    startSnapshotPublisher
+  };
 });
