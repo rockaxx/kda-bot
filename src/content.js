@@ -1,8 +1,8 @@
 (function start(root) {
   "use strict";
-  if (!root || !root.SABot || typeof chrome !== "object" || !chrome.storage) return;
+  if (!root || !root.__SA_BOT_ISOLATED_V1__ || typeof chrome !== "object" || !chrome.storage) return;
 
-  const api = root.SABot;
+  const api = root.__SA_BOT_ISOLATED_V1__;
   let pendingSnapshot = null;
   let pendingDiagnostic = null;
   let receiveSnapshot = (value) => { pendingSnapshot = value; };

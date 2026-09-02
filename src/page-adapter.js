@@ -2,10 +2,10 @@
   const dependency =
     typeof module === "object" && module.exports
       ? require("./source-patch.js")
-      : root.SABot;
+      : root.__SA_BOT_MAIN_V1__;
   const api = factory(root, dependency);
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root) Object.assign(root.SABot, api);
+  if (root) Object.assign(root.__SA_BOT_MAIN_V1__, api);
 })(typeof window === "object" ? window : null, function createApi(root, sourcePatch) {
   "use strict";
 

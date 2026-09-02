@@ -1,7 +1,7 @@
 (function expose(root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root) Object.assign(root.SABot, api);
+  if (root) Object.assign(root.__SA_BOT_ISOLATED_V1__, api);
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
 

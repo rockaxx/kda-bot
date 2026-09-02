@@ -7,7 +7,7 @@
   "content_scripts": [
     {
       "matches": ["https://steam.space-aces.com/gameNew*"],
-      "js": ["src/namespace.js", "src/source-patch.js", "src/page-adapter.js"],
+      "js": ["src/namespace-main.js", "src/source-patch.js", "src/page-adapter.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },

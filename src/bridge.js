@@ -2,10 +2,10 @@
   const dependency =
     typeof module === "object" && module.exports
       ? require("./schemas.js")
-      : root.SABot;
+      : root.__SA_BOT_ISOLATED_V1__;
   const api = factory(dependency);
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root) Object.assign(root.SABot, api);
+  if (root) Object.assign(root.__SA_BOT_ISOLATED_V1__, api);
 })(typeof window === "object" ? window : null, function createApi(schemas) {
   "use strict";
 
