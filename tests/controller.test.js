@@ -5,7 +5,7 @@ const { createController } = require("../src/controller.js");
 function snapshot(overrides = {}) {
   return {
     timestamp: 1000,
-    clientVersion: "1.9.0.045",
+    clientVersion: "1.9.0.049",
     connectionState: "connected",
     mapId: 7,
     player: {
@@ -42,6 +42,15 @@ test("waits without actions on the wrong map", () => {
 
   assert.equal(controller.getState().name, "WAITING_FOR_MAP");
   assert.deepEqual(controller.drainActions(), []);
+});
+
+test("accepts the current client version", () => {
+  const controller = createController({ settings, now: () => 1000 });
+  controller.start();
+  controller.update(snapshot({ clientVersion: "1.9.0.049" }));
+
+  assert.equal(controller.getState().name, "SEARCHING");
+  assert.notEqual(controller.getState().reason, "unsupported-client-version");
 });
 
 test("selects an NPC and requests ammo only after target confirmation", () => {

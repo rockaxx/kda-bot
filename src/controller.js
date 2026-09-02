@@ -9,7 +9,7 @@
 })(typeof window === "object" ? window : null, function createApi(planner) {
   "use strict";
 
-  const EXPECTED_CLIENT_VERSION = "1.9.0.045";
+  const EXPECTED_CLIENT_VERSION = "1.9.0.049";
   const { planFleePoint, planKitePoint, selectEdgeNpc } = planner;
 
   function createController({ settings, now = Date.now }) {

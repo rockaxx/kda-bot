@@ -1,9 +1,10 @@
 # Space Aces NPC Bot
 
 Chrome extension foundation for the authorized Space Aces NPC-only bot. The
-current build is **Phase 1 / DRY RUN**: it recognizes client `1.9.0.045`, shows
-an in-game panel, validates settings, and exports a sanitized runtime
-diagnostic. It does not click, move, select NPCs, or press ammunition keys.
+current build is **Phase 2 / DRY RUN**: it recognizes client `1.9.0.049`, shows
+an in-game panel, validates settings, reads normalized live map/player/NPC
+snapshots, and logs controller decisions. It does not click, move, select NPCs,
+or press ammunition keys.
 
 ## Current safety boundary
 
@@ -15,7 +16,7 @@ diagnostic. It does not click, move, select NPCs, or press ammunition keys.
 - Players, allies, pets, and drones are invalid targets in the planner and
   controller.
 - Controller output is logged only as `would-*`; it is never sent to the game.
-- Do not leave this Phase 1 build unattended. Active farming is not enabled.
+- Do not leave this DRY RUN build unattended. Active farming is not enabled.
 
 ## Verify locally
 
@@ -39,9 +40,9 @@ Expected: all tests pass and `extension check passed`.
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
 The **Space Aces NPC Bot — DRY RUN** panel should appear in the top-right.
-The adapter row should become `supported` for client `1.9.0.045`. Start remains
-disabled until Phase 2 supplies normalized live snapshots; this is expected at
-the Phase 1 diagnostic checkpoint.
+The adapter row should become `supported` for client `1.9.0.049`. Map, HP, and
+NPC count should populate. **Start Dry Run** then becomes enabled and records
+only `would-*` decisions without sending input to the game.
 
 ## Configure and export the checkpoint
 
@@ -78,8 +79,7 @@ disk. Saved extension settings can be removed with Chrome's extension data.
 
 ## Next phase
 
-Phase 2 uses the exported diagnostic to map exact live fields into the already
-tested normalized snapshot contract. Live selection, movement, and ammo input
-will be added only behind version lock, NPC-only validation, wrong-map wait,
-multi-NPC safety, HP recovery, emergency stop, rate limits, and supervised test
-gates. Unattended operation stays prohibited until those gates pass.
+Live selection, movement, and ammo input will be added only behind version
+lock, NPC-only validation, wrong-map wait, multi-NPC safety, HP recovery,
+emergency stop, rate limits, and supervised test gates. Unattended operation
+stays prohibited until those gates pass.

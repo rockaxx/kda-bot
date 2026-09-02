@@ -5,7 +5,7 @@
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
 
-  const CLIENT_VERSION = "1.9.0.045";
+  const CLIENT_VERSION = "1.9.0.049";
   const BUILD_MARKER_PATTERN =
     /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
   const CLIENT_FINGERPRINTS = Object.freeze([
