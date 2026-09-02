@@ -21,6 +21,28 @@
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
   }
 
+  function whenDocumentReady(documentRef, callback) {
+    if (documentRef.readyState === "loading") {
+      documentRef.addEventListener("DOMContentLoaded", callback, { once: true });
+      return;
+    }
+    callback();
+  }
+
+  function keepHostMounted(documentRef, host, Observer = MutationObserver) {
+    function mount() {
+      const parent = documentRef.body || documentRef.documentElement;
+      if (parent && !host.isConnected) parent.appendChild(host);
+    }
+    const observer = new Observer(mount);
+    mount();
+    observer.observe(documentRef.documentElement, {
+      childList: true,
+      subtree: true
+    });
+    return () => observer.disconnect();
+  }
+
   function createOverlay({ documentRef, onStart, onStop, onSave, onExport }) {
     const host = documentRef.createElement("div");
     host.id = "sa-bot-root";
@@ -109,7 +131,7 @@
     logView.textContent = "No events";
     panel.appendChild(logView);
     shadow.append(style, panel);
-    (documentRef.body || documentRef.documentElement).appendChild(host);
+    const stopMountGuard = keepHostMounted(documentRef, host);
 
     let lastModel = {};
     function readSettings() {
@@ -156,11 +178,17 @@
     }
 
     function destroy() {
+      stopMountGuard();
       host.remove();
     }
 
     return { destroy, readSettings, render };
   }
 
-  return { canStartDryRun, createOverlay };
+  return {
+    canStartDryRun,
+    createOverlay,
+    keepHostMounted,
+    whenDocumentReady
+  };
 });

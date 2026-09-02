@@ -21,7 +21,8 @@
     cleanup();
   }, { once: true });
 
-  chrome.storage.local.get(["settings"], (stored) => {
+  api.whenDocumentReady(document, () => {
+    chrome.storage.local.get(["settings"], (stored) => {
     if (unloaded) return;
     let normalized = api.normalizeSettings(stored.settings || {});
     let settings = normalized.value;
@@ -141,5 +142,6 @@
       bridge.stop();
       overlay.destroy();
     };
+    });
   });
 })(typeof window === "object" ? window : null);
