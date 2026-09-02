@@ -20,6 +20,15 @@ test("patches only the recognized client fingerprint", () => {
   assert.match(result.source, /get world\(\).*_0x429744/s);
 });
 
+test("accepts a renamed version variable when the structural roots match", () => {
+  const changedMarker = 'const _0xabcdef = "1.9.0.046";';
+  const result = patchGameSource(`${changedMarker}${roots}`);
+
+  assert.equal(result.status, "patched");
+  assert.equal(result.version, "1.9.0.046");
+  assert.match(result.source, /version:"1\.9\.0\.046"/);
+});
+
 test("leaves unknown versions byte-identical", () => {
   const source = "const version='2.0.0';";
   const result = patchGameSource(source);

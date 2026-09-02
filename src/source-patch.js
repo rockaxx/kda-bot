@@ -6,7 +6,8 @@
   "use strict";
 
   const CLIENT_VERSION = "1.9.0.045";
-  const CLIENT_VERSION_MARKER = "const _0x416562='1.9.0.045';";
+  const BUILD_MARKER_PATTERN =
+    /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
   const REQUIRED_ROOT_MARKERS = Object.freeze([
     "_0x429744['mapId']",
     "_0x22a0bf['ship']",
@@ -16,33 +17,25 @@
   const SENSITIVE_KEY =
     /token|cookie|session|auth|password|email|chat|message|payload|socket|credential/i;
 
-  function countOccurrences(source, marker) {
-    let count = 0;
-    let offset = 0;
-    while ((offset = source.indexOf(marker, offset)) !== -1) {
-      count += 1;
-      offset += marker.length;
-    }
-    return count;
-  }
-
   function unsupported(source, reason) {
     return { status: "unsupported", source, version: null, reason };
   }
 
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
-    if (countOccurrences(source, CLIENT_VERSION_MARKER) !== 1) {
+    const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
+    if (buildMarkers.length !== 1) {
       return unsupported(source, "version-marker-mismatch");
     }
     if (!REQUIRED_ROOT_MARKERS.every((marker) => source.includes(marker))) {
       return unsupported(source, "root-fingerprint-mismatch");
     }
 
+    const version = buildMarkers[0][2];
     const exposure =
       'if(!Object.prototype.hasOwnProperty.call(window,"__SA_BOT_ROOTS__")){' +
       'Object.defineProperty(window,"__SA_BOT_ROOTS__",{configurable:true,value:Object.freeze({' +
-      `version:"${CLIENT_VERSION}",` +
+      `version:"${version}",` +
       'get input(){return _0x229c50;},' +
       'get ui(){return _0x594165;},' +
       'get user(){return _0x22a0bf;},' +
@@ -52,11 +45,11 @@
       '})});}';
     return {
       status: "patched",
-      source: source.replace(
-        CLIENT_VERSION_MARKER,
-        `${CLIENT_VERSION_MARKER}${exposure}`
-      ),
-      version: CLIENT_VERSION,
+      source:
+        source.slice(0, buildMarkers[0].index + buildMarkers[0][0].length) +
+        exposure +
+        source.slice(buildMarkers[0].index + buildMarkers[0][0].length),
+      version,
       reason: "recognized-client"
     };
   }
