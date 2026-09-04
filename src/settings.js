@@ -6,7 +6,6 @@
   "use strict";
 
   const DEFAULT_SETTINGS = Object.freeze({
-    requiredMap: null,
     kiteDistance: 700,
     dangerRadius: 550,
     fleeHpPercent: 35,
@@ -42,15 +41,6 @@
     }
 
     const errors = [];
-    if (
-      value.requiredMap !== null &&
-      (!Number.isInteger(value.requiredMap) ||
-        value.requiredMap < 1 ||
-        value.requiredMap > 10000)
-    ) {
-      errors.push("requiredMap must be null or an integer from 1 to 10000");
-    }
-
     for (const [key, [minimum, maximum]] of Object.entries(RANGES)) {
       if (!inRange(value[key], minimum, maximum)) {
         errors.push(`${key} must be from ${minimum} to ${maximum}`);

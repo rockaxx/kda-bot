@@ -6,16 +6,20 @@
   let pendingSnapshot = null;
   let pendingDiagnostic = null;
   let pendingSource = null;
+  const pendingActionResults = [];
   let receiveSnapshot = (value) => { pendingSnapshot = value; };
   let receiveDiagnostic = (value) => { pendingDiagnostic = value; };
   let receiveSource = (value) => { pendingSource = value; };
+  let receiveActionResult = (value) => { pendingActionResults.push(value); };
   let cleanup = () => bridge.stop();
+  let removeEmergencyStop = () => {};
   let unloaded = false;
   const bridge = api.createBridge({
     windowRef: root,
     onSnapshot(value) { receiveSnapshot(value); },
     onDiagnostic(value) { receiveDiagnostic(value); },
-    onSource(value) { receiveSource(value); }
+    onSource(value) { receiveSource(value); },
+    onActionResult(value) { receiveActionResult(value); }
   });
   bridge.start();
 
@@ -34,7 +38,7 @@
     let diagnostic = null;
     let clientSource = null;
     let snapshot = null;
-    let active = false;
+    let runtime = null;
 
     function model() {
       return {
@@ -48,7 +52,7 @@
         snapshot,
         state: controller.getState(),
         entries: logger.list(),
-        active
+        active: runtime ? runtime.isActive() : false
       };
     }
 
@@ -56,36 +60,25 @@
       overlay.render(model());
     }
 
-    function logDryRunActions() {
-      for (const action of controller.drainActions()) {
-        const names = {
-          selectNpc: "would-select",
-          moveTo: "would-move",
-          pressAmmoKey: "would-press-key",
-          clearTarget: "would-clear-target",
-          cancelMovement: "would-cancel-movement"
-        };
-        logger.add(names[action.type] || "would-act", action);
-      }
+    function buildRuntime(nextController) {
+      return api.createRuntime({
+        controller: nextController,
+        bridge,
+        logger,
+        staleAfterMs: Math.max(2000, 5 * settings.planningIntervalMs),
+        onChange: render
+      });
     }
 
     const overlay = api.createOverlay({
       documentRef: document,
       onStart() {
-        if (!api.canStartDryRun(model())) return;
-        active = true;
-        controller.start();
-        logger.add("mode", { mode: "DRY_RUN", state: "started" });
-        if (snapshot) {
-          controller.update(snapshot);
-          logDryRunActions();
-        }
+        if (!api.canStartBot(model())) return;
+        runtime.start(snapshot);
         render();
       },
       onStop() {
-        active = false;
-        controller.stop("user-stop");
-        logger.add("mode", { mode: "DRY_RUN", state: "stopped" });
+        runtime.stop("user-stop");
         render();
       },
       onSave(rawSettings) {
@@ -93,15 +86,17 @@
         normalized = candidate;
         if (candidate.ok) {
           settings = candidate.value;
-          active = false;
-          controller.stop("settings-changed");
+          if (runtime.isActive()) runtime.stop("settings-changed");
+          runtime.destroy();
           controller = api.createController({ settings });
+          runtime = buildRuntime(controller);
           chrome.storage.local.set({ settings: { ...settings } });
           logger.add("settings", { state: "saved" });
         } else {
           logger.add("settings", { state: "rejected", errors: candidate.errors });
         }
         render();
+        return candidate.ok;
       },
       onExport() {
         const file = api.createExportFile({ clientSource, diagnostic });
@@ -115,13 +110,14 @@
         URL.revokeObjectURL(url);
       }
     });
+    runtime = buildRuntime(controller);
+    removeEmergencyStop = api.installEmergencyStop(root, () => {
+      if (runtime && runtime.isActive()) runtime.stop("emergency-shortcut");
+    });
 
     receiveSnapshot = (value) => {
       snapshot = value;
-      if (active) {
-        controller.update(value);
-        logDryRunActions();
-      }
+      runtime.receiveSnapshot(value);
       render();
     };
     receiveDiagnostic = (value) => {
@@ -131,6 +127,10 @@
         clientVersion: value.clientVersion,
         reason: value.reason
       });
+      render();
+    };
+    receiveActionResult = (value) => {
+      runtime.receiveActionResult(value);
       render();
     };
     receiveSource = (value) => {
@@ -145,13 +145,15 @@
     if (pendingDiagnostic) receiveDiagnostic(pendingDiagnostic);
     if (pendingSource) receiveSource(pendingSource);
     if (pendingSnapshot) receiveSnapshot(pendingSnapshot);
+    for (const result of pendingActionResults) receiveActionResult(result);
     pendingDiagnostic = null;
     pendingSource = null;
     pendingSnapshot = null;
+    pendingActionResults.length = 0;
     render();
     cleanup = () => {
-      active = false;
-      controller.stop("unload");
+      runtime.destroy();
+      removeEmergencyStop();
       bridge.stop();
       overlay.destroy();
     };

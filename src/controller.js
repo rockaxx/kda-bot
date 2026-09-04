@@ -10,7 +10,14 @@
   "use strict";
 
   const EXPECTED_CLIENT_VERSION = "1.9.0.049";
-  const { planFleePoint, planKitePoint, selectEdgeNpc } = planner;
+  const TARGET_CONFIRMATION_TIMEOUT_MS = 1000;
+  const MAX_TARGET_SELECTION_ATTEMPTS = 3;
+  const {
+    planEmergencyEscape,
+    planFleePoint,
+    planKitePoint,
+    selectEdgeNpc
+  } = planner;
 
   function createController({ settings, now = Date.now }) {
     let active = false;
@@ -19,6 +26,8 @@
     let lockedTargetId = null;
     let previousKitePoint = null;
     let lastMovementAt = Number.NEGATIVE_INFINITY;
+    let selectionRequestedAt = Number.NEGATIVE_INFINITY;
+    let selectionAttempts = 0;
     const blacklist = new Map();
 
     function transition(name, reason) {
@@ -33,6 +42,8 @@
       lockedTargetId = null;
       previousKitePoint = null;
       lastMovementAt = Number.NEGATIVE_INFINITY;
+      selectionRequestedAt = Number.NEGATIVE_INFINITY;
+      selectionAttempts = 0;
     }
 
     function fault(reason) {
@@ -70,14 +81,120 @@
         settings,
         null
       );
-      if (plan.status === "safe") {
-        queue({ type: "moveTo", x: plan.point.x, y: plan.point.y });
-        previousKitePoint = plan.point;
+      const movementPlan = plan.status === "safe"
+        ? plan
+        : planEmergencyEscape(snapshot.player, snapshot.entities, settings, null);
+      if (movementPlan.status === "safe" || movementPlan.status === "escape") {
+        queue({ type: "moveTo", x: movementPlan.point.x, y: movementPlan.point.y });
+        previousKitePoint = movementPlan.point;
         lastMovementAt = now();
-        transition("FLEEING", plan.reason);
+        transition("FLEEING", movementPlan.reason);
       } else {
-        transition("REPAIR_WAIT", plan.reason);
+        transition("REPAIR_WAIT", movementPlan.reason);
       }
+    }
+
+    function beginClusterEscape(snapshot, reason) {
+      actions = [];
+      if (lockedTargetId !== null) {
+        blacklist.set(lockedTargetId, now() + settings.targetBlacklistMs);
+      }
+      queue({ type: "clearTarget" });
+      resetCombatState();
+      const plan = planEmergencyEscape(
+        snapshot.player,
+        snapshot.entities,
+        settings,
+        null
+      );
+      if (plan.status !== "escape") {
+        queue({ type: "cancelMovement" });
+        transition("SEARCHING", plan.reason || reason);
+        return;
+      }
+      queue({ type: "moveTo", x: plan.point.x, y: plan.point.y });
+      previousKitePoint = plan.point;
+      lastMovementAt = now();
+      transition("ESCAPING_CLUSTER", reason || plan.reason);
+    }
+
+    function hasClusterPressure(snapshot) {
+      return snapshot.entities.some(
+        (entity) =>
+          entity.type === "npc" &&
+          entity.alive &&
+          Math.hypot(
+            entity.x - snapshot.player.x,
+            entity.y - snapshot.player.y
+          ) <= 1.5 * settings.dangerRadius
+      );
+    }
+
+    function handleClusterEscape(snapshot) {
+      const liveNpcs = snapshot.entities.filter(
+        (entity) => entity.type === "npc" && entity.alive
+      );
+      if (!hasClusterPressure(snapshot)) {
+        resetCombatState();
+        transition("SEARCHING", "cluster-escaped");
+        return;
+      }
+      if (now() - lastMovementAt < settings.movementIntervalMs) return;
+      const plan = planEmergencyEscape(
+        snapshot.player,
+        liveNpcs,
+        settings,
+        null
+      );
+      if (plan.status !== "escape") {
+        queue({ type: "cancelMovement" });
+        transition("SEARCHING", plan.reason);
+        return;
+      }
+      queue({ type: "moveTo", x: plan.point.x, y: plan.point.y });
+      previousKitePoint = plan.point;
+      lastMovementAt = now();
+      transition("ESCAPING_CLUSTER", plan.reason);
+    }
+
+    function abandonSelection(reason) {
+      if (lockedTargetId !== null) {
+        blacklist.set(lockedTargetId, now() + settings.targetBlacklistMs);
+      }
+      queue({ type: "clearTarget" });
+      queue({ type: "cancelMovement" });
+      resetCombatState();
+      transition("SEARCHING", reason);
+    }
+
+    function currentLockedPlan(snapshot) {
+      const target = snapshot.entities.find(
+        (entity) =>
+          entity.id === lockedTargetId &&
+          entity.type === "npc" &&
+          entity.alive
+      );
+      if (!target) return { status: "unsafe", reason: "target-gone" };
+      const plan = planKitePoint(
+        snapshot.player,
+        target,
+        snapshot.entities,
+        settings,
+        previousKitePoint,
+        null
+      );
+      return { ...plan, target };
+    }
+
+    function queueTargetMove(plan) {
+      queue({
+        type: "moveTo",
+        entityId: lockedTargetId,
+        x: plan.point.x,
+        y: plan.point.y
+      });
+      previousKitePoint = plan.point;
+      lastMovementAt = now();
     }
 
     function handleFailClosed(snapshot) {
@@ -114,22 +231,62 @@
         now()
       );
       if (!candidate) {
-        transition("SEARCHING", "no-safe-npc");
+        if (hasClusterPressure(snapshot)) {
+          beginClusterEscape(snapshot, "no-safe-npc");
+        } else {
+          transition("SEARCHING", "no-safe-npc");
+        }
         return;
       }
       lockedTargetId = candidate.id;
       queue({ type: "selectNpc", entityId: candidate.id });
+      selectionRequestedAt = now();
+      selectionAttempts = 1;
+      const plan = planKitePoint(
+        snapshot.player,
+        candidate,
+        snapshot.entities,
+        settings,
+        null,
+        null
+      );
+      if (plan.status === "safe") {
+        queueTargetMove(plan);
+      }
       transition("SELECTING_TARGET", "awaiting-target-confirmation");
     }
 
     function handleTargetConfirmation(snapshot) {
-      if (!snapshot.target) return;
+      if (!snapshot.target) {
+        if (now() - selectionRequestedAt < TARGET_CONFIRMATION_TIMEOUT_MS) {
+          return;
+        }
+        if (selectionAttempts >= MAX_TARGET_SELECTION_ATTEMPTS) {
+          abandonSelection("target-selection-timeout");
+          return;
+        }
+        const plan = currentLockedPlan(snapshot);
+        if (plan.status !== "safe") {
+          abandonSelection(plan.reason);
+          return;
+        }
+        queue({ type: "selectNpc", entityId: lockedTargetId });
+        queueTargetMove(plan);
+        selectionRequestedAt = now();
+        selectionAttempts += 1;
+        return;
+      }
       if (
         snapshot.target.type !== "npc" ||
         snapshot.target.id !== lockedTargetId ||
         !snapshot.target.alive
       ) {
         fault("unexpected-target-confirmation");
+        return;
+      }
+      const plan = currentLockedPlan(snapshot);
+      if (plan.status !== "safe") {
+        beginClusterEscape(snapshot, plan.reason);
         return;
       }
       queue({ type: "pressAmmoKey", key: settings.ammoKey });
@@ -162,17 +319,11 @@
         null
       );
       if (plan.status !== "safe") {
-        blacklist.set(lockedTargetId, now() + settings.targetBlacklistMs);
-        queue({ type: "clearTarget" });
-        queue({ type: "cancelMovement" });
-        resetCombatState();
-        transition("SEARCHING", plan.reason);
+        beginClusterEscape(snapshot, plan.reason);
         return;
       }
       if (now() - lastMovementAt >= settings.movementIntervalMs) {
-        queue({ type: "moveTo", x: plan.point.x, y: plan.point.y });
-        previousKitePoint = plan.point;
-        lastMovementAt = now();
+        queueTargetMove(plan);
       }
       transition("KITING", plan.reason);
     }
@@ -180,16 +331,6 @@
     function update(snapshot) {
       if (!active) return;
       if (handleFailClosed(snapshot)) return;
-
-      if (
-        settings.requiredMap === null ||
-        snapshot.mapId !== settings.requiredMap
-      ) {
-        actions = [];
-        resetCombatState();
-        transition("WAITING_FOR_MAP", "required-map-not-active");
-        return;
-      }
 
       if (state.name === "REPAIR_WAIT") {
         if (snapshot.player.hpPercent >= settings.resumeHpPercent) {
@@ -217,7 +358,12 @@
         return;
       }
 
-      if (state.name === "SEARCHING" || state.name === "WAITING_FOR_MAP") {
+      if (state.name === "ESCAPING_CLUSTER") {
+        handleClusterEscape(snapshot);
+        return;
+      }
+
+      if (state.name === "SEARCHING") {
         handleSearch(snapshot);
         return;
       }

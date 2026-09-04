@@ -6,7 +6,6 @@
   "use strict";
 
   const FIELD_DEFINITIONS = Object.freeze([
-    ["requiredMap", "Map ID", "number"],
     ["kiteDistance", "Kite distance", "number"],
     ["dangerRadius", "Danger radius", "number"],
     ["fleeHpPercent", "Flee HP %", "number"],
@@ -16,13 +15,54 @@
     ["movementIntervalMs", "Move interval ms", "number"],
     ["targetBlacklistMs", "Blacklist ms", "number"]
   ]);
+  const EXPECTED_CLIENT_VERSION = "1.9.0.049";
 
-  function canStartDryRun({ settingsValid, adapterSupported, hasSnapshot }) {
+  function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
   }
 
+  function formatMapStatus(snapshot) {
+    return snapshot ? String(snapshot.mapId) : "—";
+  }
+
+  function createSettingsFormState(inputs) {
+    const dirtyFields = new Set();
+    for (const [key] of FIELD_DEFINITIONS) {
+      inputs[key].addEventListener("input", () => dirtyFields.add(key));
+    }
+
+    function readSettings() {
+      const result = {};
+      for (const [key, , type] of FIELD_DEFINITIONS) {
+        const raw = inputs[key].value.trim();
+        result[key] = type === "number" ? Number(raw) : raw;
+      }
+      return result;
+    }
+
+    function sync(settings) {
+      if (!settings) return;
+      for (const [key] of FIELD_DEFINITIONS) {
+        if (dirtyFields.has(key)) continue;
+        inputs[key].value = settings[key] === null ? "" : String(settings[key]);
+      }
+    }
+
+    function submit(onSave) {
+      const result = onSave(readSettings());
+      if (result === true) dirtyFields.clear();
+    }
+
+    return { readSettings, submit, sync };
+  }
+
   function isSupportedDiagnostic(diagnostic) {
-    return Boolean(diagnostic && diagnostic.patchStatus === "patched");
+    return Boolean(
+      diagnostic &&
+      diagnostic.patchStatus === "patched" &&
+      String(diagnostic.clientVersion || "").replace(/^n/, "") ===
+        EXPECTED_CLIENT_VERSION
+    );
   }
 
   function createExportFile({ clientSource, diagnostic }) {
@@ -94,7 +134,7 @@
     const panel = documentRef.createElement("section");
     panel.className = "panel";
     const title = documentRef.createElement("h2");
-    title.textContent = "Space Aces NPC Bot — DRY RUN";
+    title.textContent = "Space Aces NPC Bot — ACTIVE";
     panel.appendChild(title);
 
     const fields = documentRef.createElement("div");
@@ -109,6 +149,7 @@
       inputs[key] = input;
       fields.append(label, input);
     }
+    const settingsForm = createSettingsFormState(inputs);
     panel.appendChild(fields);
 
     const buttons = documentRef.createElement("div");
@@ -120,7 +161,7 @@
       buttons.appendChild(button);
       return button;
     };
-    const startButton = makeButton("Start Dry Run");
+    const startButton = makeButton("START BOT");
     const stopButton = makeButton("STOP", "stop");
     const saveButton = makeButton("Save settings");
     const exportButton = makeButton("Export diagnostic");
@@ -154,32 +195,18 @@
     const stopMountGuard = keepHostMounted(documentRef, host);
 
     let lastModel = {};
-    function readSettings() {
-      const result = {};
-      for (const [key, , type] of FIELD_DEFINITIONS) {
-        const raw = inputs[key].value.trim();
-        result[key] = key === "requiredMap" && raw === ""
-          ? null
-          : type === "number" ? Number(raw) : raw;
-      }
-      return result;
-    }
 
     startButton.addEventListener("click", () => {
-      if (canStartDryRun(lastModel)) onStart();
+      if (canStartBot(lastModel)) onStart();
     });
     stopButton.addEventListener("click", () => onStop());
-    saveButton.addEventListener("click", () => onSave(readSettings()));
+    saveButton.addEventListener("click", () => settingsForm.submit(onSave));
     exportButton.addEventListener("click", () => onExport());
 
     function render(model) {
       lastModel = { ...model };
-      if (model.settings) {
-        for (const [key] of FIELD_DEFINITIONS) {
-          inputs[key].value = model.settings[key] === null ? "" : String(model.settings[key]);
-        }
-      }
-      startButton.disabled = !canStartDryRun(model) || Boolean(model.active);
+      settingsForm.sync(model.settings);
+      startButton.disabled = !canStartBot(model) || Boolean(model.active);
       stopButton.disabled = !model.active;
       exportButton.disabled = !model.diagnostic && !model.clientSource;
       exportButton.textContent = model.clientSource
@@ -189,11 +216,11 @@
       const snapshot = model.snapshot;
       statusValues.fsm.textContent = `${model.state?.name || "STOPPED"} (${model.state?.reason || "—"})`;
       statusValues.adapter.textContent = model.adapterSupported ? "supported" : "waiting/unsupported";
-      statusValues.map.textContent = snapshot ? `${snapshot.mapId} / ${model.settings?.requiredMap ?? "unset"}` : "—";
+      statusValues.map.textContent = formatMapStatus(snapshot);
       statusValues.hp.textContent = snapshot ? `${snapshot.player.hpPercent}%` : "—";
       statusValues.target.textContent = snapshot?.target ? `${snapshot.target.type}:${snapshot.target.id}` : "none";
       statusValues.nearby.textContent = snapshot ? String(snapshot.entities.filter((e) => e.type === "npc" && e.alive).length) : "—";
-      statusValues.safety.textContent = model.active ? "DRY RUN — no actions sent" : "stopped";
+      statusValues.safety.textContent = model.active ? "ACTIVE — NPC ONLY" : "stopped";
       const entries = model.entries || [];
       logView.textContent = entries.length
         ? entries.slice(-12).map((entry) => `${entry.at} ${entry.type} ${JSON.stringify(entry.data)}`).join("\n")
@@ -205,13 +232,15 @@
       host.remove();
     }
 
-    return { destroy, readSettings, render };
+    return { destroy, readSettings: settingsForm.readSettings, render };
   }
 
   return {
-    canStartDryRun,
+    canStartBot,
     createExportFile,
     createOverlay,
+    createSettingsFormState,
+    formatMapStatus,
     isSupportedDiagnostic,
     keepHostMounted,
     whenDocumentReady

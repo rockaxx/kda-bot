@@ -7,7 +7,6 @@ const {
 
 test("provides conservative defaults", () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
-    requiredMap: null,
     kiteDistance: 700,
     dangerRadius: 550,
     fleeHpPercent: 35,
@@ -27,7 +26,7 @@ test("normalizes a partial settings object without unknown keys", () => {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.value.requiredMap, 7);
+  assert.equal(Object.hasOwn(result.value, "requiredMap"), false);
   assert.equal(result.value.fleeHpPercent, 40);
   assert.equal(Object.hasOwn(result.value, "ignored"), false);
   assert.equal(Object.isFrozen(result.value), true);
@@ -43,20 +42,19 @@ test("rejects resume threshold below flee threshold", () => {
   assert.match(result.errors.join(" "), /resumeHpPercent/);
 });
 
-test("rejects non-numeric map and unsupported ammo bind", () => {
+test("ignores legacy map setting but rejects unsupported ammo bind", () => {
   const result = normalizeSettings({
     requiredMap: "sector",
     ammoKey: "F12"
   });
 
   assert.equal(result.ok, false);
-  assert.match(result.errors.join(" "), /requiredMap/);
+  assert.doesNotMatch(result.errors.join(" "), /requiredMap/);
   assert.match(result.errors.join(" "), /ammoKey/);
 });
 
 test("rejects values outside every documented numeric range", () => {
   const result = normalizeSettings({
-    requiredMap: 0,
     kiteDistance: 99,
     dangerRadius: 5001,
     fleeHpPercent: 0,
@@ -67,5 +65,5 @@ test("rejects values outside every documented numeric range", () => {
   });
 
   assert.equal(result.ok, false);
-  assert.equal(result.errors.length, 8);
+  assert.equal(result.errors.length, 7);
 });

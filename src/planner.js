@@ -9,7 +9,7 @@
 })(typeof window === "object" ? window : null, function createApi(geometry) {
   "use strict";
 
-  const { distance, isPathClear, pointOnCircle } = geometry;
+  const { distance, isPathClear, pointOnCircle, segmentDistance } = geometry;
 
   function isBlacklisted(blacklist, id, now) {
     return (blacklist.get(id) || 0) > now;
@@ -189,5 +189,52 @@
     return { status: "safe", point, reason: "away-from-npc-centroid" };
   }
 
-  return { planFleePoint, planKitePoint, selectEdgeNpc };
+  function planEmergencyEscape(player, entities, settings, bounds) {
+    const hazards = entities.filter(
+      (entity) => entity.type === "npc" && entity.alive
+    );
+    if (!hazards.length) {
+      return { status: "unsafe", reason: "no-live-npc-to-escape" };
+    }
+    const escapeDistance = 2 * settings.kiteDistance;
+    const candidates = [];
+    for (let index = 0; index < 32; index += 1) {
+      const angle = (index * 2 * Math.PI) / 32;
+      const point = pointOnCircle(player, escapeDistance, angle);
+      if (!isInsideBounds(point, bounds)) continue;
+      const corridorStart = pointOnCircle(player, escapeDistance * 0.25, angle);
+      const routeClearance = Math.min(
+        ...hazards.map((hazard) =>
+          segmentDistance(hazard, corridorStart, point)
+        )
+      );
+      const endpointClearance = Math.min(
+        ...hazards.map((hazard) => distance(hazard, point))
+      );
+      candidates.push({
+        index,
+        point,
+        score: 3 * routeClearance + endpointClearance
+      });
+    }
+    candidates.sort(
+      (left, right) => right.score - left.score || left.index - right.index
+    );
+    if (!candidates.length) {
+      return { status: "unsafe", reason: "no-emergency-escape-point" };
+    }
+    return {
+      status: "escape",
+      point: candidates[0].point,
+      reason: "widest-cluster-gap",
+      score: candidates[0].score
+    };
+  }
+
+  return {
+    planEmergencyEscape,
+    planFleePoint,
+    planKitePoint,
+    selectEdgeNpc
+  };
 });

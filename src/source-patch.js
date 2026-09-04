@@ -10,24 +10,28 @@
     /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
   const CLIENT_FINGERPRINTS = Object.freeze([
     Object.freeze({
+      version: "1.9.0.049",
       markers: Object.freeze([
         "_0x8541dd['mapId']",
         "_0x3d592['ship']",
         "_0x5d1a8d['gamepadTargeter']",
         "_0xc13e48['initListeners']",
         "_0x1e1267['followX']",
-        "_0x313249['handleWriteLog']"
+        "_0x313249['handleWriteLog']",
+        "_0x2e4b9e['initiateConnection']()"
       ]),
       roots: Object.freeze({
         input: "_0xc13e48",
         ui: "_0x313249",
         user: "_0x3d592",
+        network: "_0x2e4b9e",
         camera: "_0x1e1267",
         world: "_0x8541dd",
         renderer: "_0x5d1a8d"
       })
     }),
     Object.freeze({
+      version: "1.9.0.045",
       markers: Object.freeze([
         "_0x429744['mapId']",
         "_0x22a0bf['ship']",
@@ -38,6 +42,7 @@
         input: "_0x229c50",
         ui: "_0x594165",
         user: "_0x22a0bf",
+        network: "null",
         camera: "_0x1ceb4c",
         world: "_0x429744",
         renderer: "_0x607b9"
@@ -64,10 +69,10 @@
       return unsupported(source, "version-marker-ambiguous");
     }
 
-    const version = buildMarkers.length === 1 ? buildMarkers[0][2] : null;
-    const versionExpression = version
-      ? `"${version}"`
-      : 'String(window.FETCH_V||window.WORKER_V||"unknown")';
+    const version = buildMarkers.length === 1
+      ? buildMarkers[0][2]
+      : fingerprint.version;
+    const versionExpression = `"${version}"`;
     const exposure =
       'if(!Object.prototype.hasOwnProperty.call(window,"__SA_BOT_ROOTS__")){' +
       'Object.defineProperty(window,"__SA_BOT_ROOTS__",{configurable:true,value:Object.freeze({' +
@@ -75,6 +80,7 @@
       `get input(){return ${fingerprint.roots.input};},` +
       `get ui(){return ${fingerprint.roots.ui};},` +
       `get user(){return ${fingerprint.roots.user};},` +
+      `get network(){return ${fingerprint.roots.network};},` +
       `get camera(){return ${fingerprint.roots.camera};},` +
       `get world(){return ${fingerprint.roots.world};},` +
       `get renderer(){return ${fingerprint.roots.renderer};}` +
@@ -89,7 +95,9 @@
         exposure +
         source.slice(insertionIndex),
       version,
-      reason: version ? "recognized-client" : "recognized-structural-client"
+      reason: buildMarkers.length === 1
+        ? "recognized-client"
+        : "recognized-structural-client"
     };
   }
 

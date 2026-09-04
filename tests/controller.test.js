@@ -24,7 +24,6 @@ function snapshot(overrides = {}) {
 }
 
 const settings = {
-  requiredMap: 7,
   kiteDistance: 700,
   dangerRadius: 550,
   fleeHpPercent: 35,
@@ -35,13 +34,29 @@ const settings = {
   targetBlacklistMs: 5000
 };
 
-test("waits without actions on the wrong map", () => {
+test("selects NPCs on whichever map is currently active", () => {
   const controller = createController({ settings, now: () => 1000 });
   controller.start();
-  controller.update(snapshot({ mapId: 8 }));
+  controller.update(snapshot({
+    mapId: 8,
+    entities: [{
+      id: "map-8-npc",
+      type: "npc",
+      x: 900,
+      y: 0,
+      hpPercent: 100,
+      alive: true
+    }]
+  }));
 
-  assert.equal(controller.getState().name, "WAITING_FOR_MAP");
-  assert.deepEqual(controller.drainActions(), []);
+  assert.equal(controller.getState().name, "SELECTING_TARGET");
+  const actions = controller.drainActions();
+  assert.deepEqual(actions[0], {
+    type: "selectNpc",
+    entityId: "map-8-npc"
+  });
+  assert.equal(actions[1].type, "moveTo");
+  assert.equal(actions[1].entityId, "map-8-npc");
 });
 
 test("accepts the current client version", () => {
@@ -66,9 +81,16 @@ test("selects an NPC and requests ammo only after target confirmation", () => {
   controller.start();
   controller.update(snapshot({ entities: [npc] }));
 
-  assert.deepEqual(controller.drainActions(), [
-    { type: "selectNpc", entityId: "n1" }
-  ]);
+  const initialActions = controller.drainActions();
+  assert.deepEqual(initialActions[0], {
+    type: "selectNpc",
+    entityId: "n1"
+  });
+  assert.equal(initialActions[1].type, "moveTo");
+  assert.equal(initialActions[1].entityId, "n1");
+  assert.ok(
+    Math.abs(Math.hypot(initialActions[1].x - npc.x, initialActions[1].y - npc.y) - 700) < 0.001
+  );
 
   controller.update(
     snapshot({
@@ -81,6 +103,83 @@ test("selects an NPC and requests ammo only after target confirmation", () => {
     type: "pressAmmoKey",
     key: "1"
   });
+});
+
+test("retries target selection instead of waiting forever", () => {
+  let clock = 1000;
+  const controller = createController({ settings, now: () => clock });
+  const npc = {
+    id: "n1",
+    type: "npc",
+    x: 900,
+    y: 0,
+    hpPercent: 100,
+    alive: true
+  };
+  controller.start();
+  controller.update(snapshot({ entities: [npc] }));
+  controller.drainActions();
+  clock = 2100;
+
+  controller.update(snapshot({ timestamp: 2100, entities: [npc] }));
+
+  const retryActions = controller.drainActions();
+  assert.deepEqual(retryActions[0], { type: "selectNpc", entityId: "n1" });
+  assert.equal(retryActions[1].type, "moveTo");
+  assert.equal(retryActions[1].entityId, "n1");
+});
+
+test("selection retry cancels movement when locked NPC vanished", () => {
+  let clock = 1000;
+  const controller = createController({ settings, now: () => clock });
+  const npc = {
+    id: "n1", type: "npc", x: 900, y: 0,
+    hpPercent: 100, alive: true
+  };
+  controller.start();
+  controller.update(snapshot({ entities: [npc] }));
+  controller.drainActions();
+  clock = 2100;
+
+  controller.update(snapshot({ timestamp: 2100, entities: [] }));
+
+  assert.equal(controller.getState().name, "SEARCHING");
+  assert.deepEqual(controller.drainActions(), [
+    { type: "clearTarget" },
+    { type: "cancelMovement" }
+  ]);
+
+  clock = 4400;
+  controller.update(snapshot({ timestamp: 4400, entities: [npc] }));
+
+  assert.equal(controller.getState().name, "SEARCHING");
+  assert.deepEqual(controller.drainActions(), []);
+});
+
+test("selection timeout cancels old approach movement", () => {
+  let clock = 1000;
+  const controller = createController({ settings, now: () => clock });
+  const npc = {
+    id: "n1", type: "npc", x: 900, y: 0,
+    hpPercent: 100, alive: true
+  };
+  controller.start();
+  controller.update(snapshot({ entities: [npc] }));
+  controller.drainActions();
+  for (const time of [2100, 3200]) {
+    clock = time;
+    controller.update(snapshot({ timestamp: time, entities: [npc] }));
+    controller.drainActions();
+  }
+  clock = 4300;
+
+  controller.update(snapshot({ timestamp: 4300, entities: [npc] }));
+
+  assert.equal(controller.getState().name, "SEARCHING");
+  assert.deepEqual(controller.drainActions(), [
+    { type: "clearTarget" },
+    { type: "cancelMovement" }
+  ]);
 });
 
 test("low HP disengages and waits for full repair", () => {
@@ -186,4 +285,50 @@ test("emergency stop clears queued actions and locked state", () => {
   assert.equal(controller.getState().name, "STOPPED");
   assert.equal(controller.getState().reason, "emergency-stop");
   assert.deepEqual(controller.drainActions(), []);
+});
+
+test("dense NPC ring triggers continuous cluster escape instead of stopping", () => {
+  let clock = 1000;
+  const controller = createController({ settings, now: () => clock });
+  const target = {
+    id: "target", type: "npc", x: 900, y: 0,
+    hpPercent: 100, alive: true
+  };
+  controller.start();
+  controller.update(snapshot({ entities: [target] }));
+  controller.drainActions();
+  controller.update(snapshot({
+    target: { id: "target", type: "npc", alive: true },
+    entities: [target]
+  }));
+  controller.drainActions();
+  const ring = Array.from({ length: 16 }, (_, index) => ({
+    id: `ring-${index}`,
+    type: "npc",
+    x: 300 * Math.cos((index * Math.PI) / 8),
+    y: 300 * Math.sin((index * Math.PI) / 8),
+    hpPercent: 100,
+    alive: true
+  }));
+  clock = 1300;
+
+  controller.update(snapshot({
+    timestamp: 1300,
+    target: { id: "target", type: "npc", alive: true },
+    entities: [target, ...ring]
+  }));
+
+  assert.equal(controller.getState().name, "ESCAPING_CLUSTER");
+  const firstEscape = controller.drainActions();
+  assert.equal(firstEscape[0].type, "clearTarget");
+  assert.equal(firstEscape.some((action) => action.type === "cancelMovement"), false);
+  assert.equal(firstEscape.some((action) => action.type === "moveTo"), true);
+
+  clock = 1600;
+  controller.update(snapshot({ timestamp: 1600, entities: ring }));
+  assert.equal(controller.getState().name, "ESCAPING_CLUSTER");
+  assert.equal(
+    controller.drainActions().some((action) => action.type === "moveTo"),
+    true
+  );
 });

@@ -12,10 +12,11 @@ const roots =
   "_0x607b9['gamepadTargeter'];_0x229c50['initListeners'];";
 
 const currentRoots =
-  "let _0xc13e48,_0x313249,_0x3d592,_0x1e1267,_0x8541dd,_0x5d1a8d;" +
+  "let _0xc13e48,_0x313249,_0x3d592,_0x1e1267,_0x8541dd,_0x5d1a8d,_0x2e4b9e;" +
   "_0x8541dd['mapId'];_0x3d592['ship'];" +
   "_0x5d1a8d['gamepadTargeter'];_0xc13e48['initListeners'];" +
-  "_0x1e1267['followX'];_0x313249['handleWriteLog'];";
+  "_0x1e1267['followX'];_0x313249['handleWriteLog'];" +
+  "_0x2e4b9e['initiateConnection']();";
 
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
@@ -48,15 +49,25 @@ test("patches current client with its exact six root symbols", () => {
   assert.match(result.source, /get camera\(\).*_0x1e1267/s);
   assert.match(result.source, /get world\(\).*_0x8541dd/s);
   assert.match(result.source, /get renderer\(\).*_0x5d1a8d/s);
+  assert.match(result.source, /get network\(\).*_0x2e4b9e/s);
 });
 
-test("uses runtime build version when structurally matching source has no literal", () => {
-  const result = patchGameSource(roots);
+test("uses the known current fingerprint version when source has no literal", () => {
+  const result = patchGameSource(currentRoots);
 
   assert.equal(result.status, "patched");
-  assert.equal(result.version, null);
+  assert.equal(result.version, "1.9.0.049");
   assert.equal(result.reason, "recognized-structural-client");
-  assert.match(result.source, /window\.FETCH_V/);
+  assert.match(result.source, /version:"1\.9\.0\.049"/);
+});
+
+test("rejects a current-like fingerprint without the mapped network root", () => {
+  const withoutNetwork = currentRoots.replace(
+    "_0x2e4b9e['initiateConnection']();",
+    ""
+  );
+
+  assert.equal(patchGameSource(withoutNetwork).status, "unsupported");
 });
 
 test("leaves unknown versions byte-identical", () => {

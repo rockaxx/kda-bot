@@ -24,13 +24,19 @@ function validSnapshot() {
 
 function fakeWindow() {
   const listeners = {};
+  const messages = [];
   return {
     listeners,
+    messages,
     addEventListener(name, fn) {
       listeners[name] = fn;
     },
     removeEventListener(name, fn) {
       if (listeners[name] === fn) delete listeners[name];
+    },
+    postMessage(message, target) {
+      assert.equal(target, "*");
+      messages.push(message);
     }
   };
 }
@@ -119,4 +125,54 @@ test("bridge accepts bounded client source and rejects oversized source", () => 
     reason: "root-fingerprint-mismatch",
     source: "const currentClient = true;"
   }]);
+});
+
+test("bridge sends only the narrow action envelope with monotonic IDs", () => {
+  const windowRef = fakeWindow();
+  const bridge = createBridge({
+    windowRef,
+    onSnapshot: () => {},
+    onDiagnostic: () => {}
+  });
+
+  const first = bridge.sendAction({ type: "arm" });
+  const second = bridge.sendAction({ type: "moveTo", x: 10, y: 20 });
+
+  assert.equal(first, 1);
+  assert.equal(second, 2);
+  assert.deepEqual(windowRef.messages, [
+    {
+      channel: "sa-bot-v1",
+      direction: "action",
+      payload: { requestId: 1, type: "arm" }
+    },
+    {
+      channel: "sa-bot-v1",
+      direction: "action",
+      payload: { requestId: 2, type: "moveTo", x: 10, y: 20 }
+    }
+  ]);
+});
+
+test("bridge accepts only validated action results", () => {
+  const windowRef = fakeWindow();
+  const results = [];
+  const bridge = createBridge({
+    windowRef,
+    onSnapshot: () => {},
+    onDiagnostic: () => {},
+    onActionResult: (value) => results.push(value)
+  });
+  bridge.start();
+  const send = (payload) => windowRef.listeners.message({
+    source: windowRef,
+    data: { channel: "sa-bot-v1", direction: "action-result", payload }
+  });
+
+  send({ requestId: 1, type: "arm", ok: true, reason: "armed" });
+  send({ requestId: 2, type: "moveTo", ok: "yes", reason: "bad" });
+
+  assert.deepEqual(results, [
+    { requestId: 1, type: "arm", ok: true, reason: "armed" }
+  ]);
 });

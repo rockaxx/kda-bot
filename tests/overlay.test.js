@@ -1,12 +1,54 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  canStartDryRun,
+  canStartBot,
+  createSettingsFormState,
   createExportFile,
+  formatMapStatus,
   isSupportedDiagnostic,
   keepHostMounted,
   whenDocumentReady
 } = require("../src/overlay.js");
+
+test("settings draft survives live renders until successful save", () => {
+  const listeners = {};
+  const inputs = {};
+  for (const key of [
+    "kiteDistance", "dangerRadius", "fleeHpPercent", "resumeHpPercent",
+    "ammoKey", "planningIntervalMs", "movementIntervalMs", "targetBlacklistMs"
+  ]) {
+    inputs[key] = {
+      value: "",
+      addEventListener(name, handler) { listeners[`${key}:${name}`] = handler; }
+    };
+  }
+  const form = createSettingsFormState(inputs);
+  const persisted = {
+    kiteDistance: 700,
+    dangerRadius: 550,
+    fleeHpPercent: 35,
+    resumeHpPercent: 100,
+    ammoKey: "1",
+    planningIntervalMs: 100,
+    movementIntervalMs: 250,
+    targetBlacklistMs: 5000
+  };
+
+  form.sync(persisted);
+  inputs.kiteDistance.value = "850";
+  listeners["kiteDistance:input"]();
+  form.sync(persisted);
+  assert.equal(inputs.kiteDistance.value, "850");
+
+  let submitted;
+  form.submit((value) => {
+    submitted = value;
+    return true;
+  });
+  assert.equal(submitted.kiteDistance, 850);
+  form.sync({ ...persisted, kiteDistance: 900 });
+  assert.equal(inputs.kiteDistance.value, "900");
+});
 
 test("client source export takes priority over fallback diagnostic JSON", () => {
   assert.deepEqual(
@@ -22,22 +64,31 @@ test("client source export takes priority over fallback diagnostic JSON", () => 
   );
 });
 
-test("structurally patched runtime diagnostic enables the adapter gate", () => {
+test("only the current patched client enables the adapter gate", () => {
   assert.equal(
-    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.8.9.099" }),
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.049" }),
     true
   );
   assert.equal(
-    isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.8.9.099" }),
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.045" }),
+    false
+  );
+  assert.equal(
+    isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.9.0.049" }),
     false
   );
 });
 
-test("Dry Run starts only with valid settings, supported adapter, and snapshot", () => {
-  assert.equal(canStartDryRun({ settingsValid: true, adapterSupported: true, hasSnapshot: true }), true);
-  assert.equal(canStartDryRun({ settingsValid: false, adapterSupported: true, hasSnapshot: true }), false);
-  assert.equal(canStartDryRun({ settingsValid: true, adapterSupported: false, hasSnapshot: true }), false);
-  assert.equal(canStartDryRun({ settingsValid: true, adapterSupported: true, hasSnapshot: false }), false);
+test("Bot starts only with valid settings, supported adapter, and snapshot", () => {
+  assert.equal(canStartBot({ settingsValid: true, adapterSupported: true, hasSnapshot: true }), true);
+  assert.equal(canStartBot({ settingsValid: false, adapterSupported: true, hasSnapshot: true }), false);
+  assert.equal(canStartBot({ settingsValid: true, adapterSupported: false, hasSnapshot: true }), false);
+  assert.equal(canStartBot({ settingsValid: true, adapterSupported: true, hasSnapshot: false }), false);
+});
+
+test("map status shows only the currently detected map", () => {
+  assert.equal(formatMapStatus({ mapId: 17 }), "17");
+  assert.equal(formatMapStatus(null), "—");
 });
 
 test("overlay initialization waits for the stable document body", () => {

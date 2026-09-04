@@ -11,6 +11,15 @@
 
   const MAX_DIAGNOSTIC_BYTES = 200 * 1024;
   const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
+  const ACTION_TYPES = new Set([
+    "arm",
+    "disarm",
+    "selectNpc",
+    "moveTo",
+    "pressAmmoKey",
+    "cancelMovement",
+    "clearTarget"
+  ]);
 
   function isPlainJson(value, seen = new WeakSet()) {
     if (value === null) return true;
@@ -32,9 +41,11 @@
     windowRef,
     onSnapshot,
     onDiagnostic,
-    onSource = () => {}
+    onSource = () => {},
+    onActionResult = () => {}
   }) {
     let listening = false;
+    let nextRequestId = 1;
 
     function handleMessage(event) {
       if (event.source !== windowRef) return;
@@ -58,6 +69,25 @@
         onSource({ reason: payload.reason, source: payload.source });
         return;
       }
+      if (envelope.direction === "action-result") {
+        const payload = envelope.payload;
+        if (
+          !schemas.isPlainObject(payload) ||
+          !Number.isInteger(payload.requestId) ||
+          payload.requestId < 1 ||
+          !ACTION_TYPES.has(payload.type) ||
+          typeof payload.ok !== "boolean" ||
+          typeof payload.reason !== "string" ||
+          payload.reason.length > 100
+        ) return;
+        onActionResult({
+          requestId: payload.requestId,
+          type: payload.type,
+          ok: payload.ok,
+          reason: payload.reason
+        });
+        return;
+      }
       if (envelope.direction !== "diagnostic" || !isPlainJson(envelope.payload)) return;
       if (serializedSize(envelope.payload) > MAX_DIAGNOSTIC_BYTES) return;
       onDiagnostic(JSON.parse(JSON.stringify(envelope.payload)));
@@ -75,7 +105,20 @@
       windowRef.removeEventListener("message", handleMessage);
     }
 
-    return { start, stop };
+    function sendAction(action) {
+      if (!schemas.isPlainObject(action) || !ACTION_TYPES.has(action.type)) {
+        throw new TypeError("invalid bot action");
+      }
+      const payload = { requestId: nextRequestId++, ...action };
+      windowRef.postMessage({
+        channel: schemas.CHANNEL,
+        direction: "action",
+        payload
+      }, "*");
+      return payload.requestId;
+    }
+
+    return { sendAction, start, stop };
   }
 
   return { createBridge, MAX_DIAGNOSTIC_BYTES, MAX_SOURCE_BYTES };

@@ -1,10 +1,9 @@
 # Space Aces NPC Bot
 
-Chrome extension foundation for the authorized Space Aces NPC-only bot. The
-current build is **Phase 2 / DRY RUN**: it recognizes client `1.9.0.049`, shows
-an in-game panel, validates settings, reads normalized live map/player/NPC
-snapshots, and logs controller decisions. It does not click, move, select NPCs,
-or press ammunition keys.
+Chrome extension for the authorized Space Aces NPC-only bot. The current build
+is **Phase 3 / ACTIVE**: it recognizes client `1.9.0.049`, detects the current
+map automatically, selects verified NPCs, presses the configured ammo bind, and
+kites through the game's normal movement path.
 
 ## Current safety boundary
 
@@ -15,8 +14,15 @@ or press ammunition keys.
   start.
 - Players, allies, pets, and drones are invalid targets in the planner and
   controller.
-- Controller output is logged only as `would-*`; it is never sent to the game.
-- Do not leave this DRY RUN build unattended. Active farming is not enabled.
+- Every target and ammo action re-checks the live entity and requires
+  `isNpc === true`; players are rejected.
+- Every movement route is checked against the client's live map barriers.
+  Routes toward radiation are shortened to keep a 300-unit safety margin.
+- Dense NPC surrounds trigger `ESCAPING_CLUSTER`: the bot repeatedly moves
+  through the widest available gap instead of cancelling movement and standing.
+- The MAIN-world action adapter starts disarmed. STOP, faults, stale snapshots,
+  and page unload disarm it and cancel current target/movement.
+- First use must be supervised before any unattended session.
 
 ## Verify locally
 
@@ -39,26 +45,28 @@ Expected: all tests pass and `extension check passed`.
 6. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
-The **Space Aces NPC Bot — DRY RUN** panel should appear in the top-right.
+The **Space Aces NPC Bot — ACTIVE** panel should appear in the top-right.
 The adapter row should become `supported` for client `1.9.0.049`. Map, HP, and
-NPC count should populate. **Start Dry Run** then becomes enabled and records
-only `would-*` decisions without sending input to the game.
+NPC count should populate. **START BOT** then becomes enabled.
 
-## Configure and export the checkpoint
+## Configure and run
 
-1. Enter the map ID where the bot will eventually operate. You still travel to
-   that map manually.
+1. Travel to the wanted map manually. No map ID is configured; the bot uses
+   the currently detected map.
 2. Set kite distance, all-NPC danger radius, flee/resume HP percentages, ammo
    key, intervals, and blacklist duration.
 3. Click **Save settings**. Invalid values appear under the buttons.
-4. If the client fingerprint is recognized, click **Export diagnostic** after
-   the adapter row reports `supported`.
-5. If live obfuscation changed, the button becomes **Export client source**.
-   Click it and keep the downloaded file as `space-aces-client-current.js`.
-6. Create `C:\Users\Alex\Desktop\SA BOT\local-diagnostics` and move the
-   downloaded JSON or JS file there.
-7. Send that local file for Phase 2 mapping. Do not commit or publicly share it;
-   sanitized runtime structures may still contain account-specific IDs.
+4. For the first supervised check, stand near one isolated NPC and click
+   **START BOT**. Confirm target selection, ammo activation, and movement.
+5. Click **STOP** during movement. Confirm target clears and the ship stops.
+6. Only after this passes, test several NPCs and low-HP retreat/repair.
+
+Emergency stop shortcut: **Shift+Escape**.
+
+The export button remains available for client update diagnostics. If live
+obfuscation changes, it exports `space-aces-client-current.js`. Do not commit or
+publicly share exports; sanitized runtime structures may still contain
+account-specific IDs.
 
 The export contains only bounded, sanitized summaries of six client roots:
 `input`, `ui`, `user`, `camera`, `world`, and `renderer`. Keys resembling auth,
@@ -77,9 +85,9 @@ For immediate rollback, open `chrome://extensions` and disable or remove
 **Space Aces NPC Bot**, then reload the game tab. No game files are modified on
 disk. Saved extension settings can be removed with Chrome's extension data.
 
-## Next phase
+## Known live gate
 
-Live selection, movement, and ammo input will be added only behind version
-lock, NPC-only validation, wrong-map wait, multi-NPC safety, HP recovery,
-emergency stop, rate limits, and supervised test gates. Unattended operation
-stays prohibited until those gates pass.
+Automated/static tests verify the action contract, NPC-only checks, controller,
+STOP cleanup, and watchdog. Real browser/game behavior still requires the
+supervised steps above after every client update. Do not assume a new client
+version is compatible until its structural fingerprint is reviewed.

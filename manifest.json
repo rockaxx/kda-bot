@@ -23,6 +23,7 @@
         "src/logger.js",
         "src/bridge.js",
         "src/overlay.js",
+        "src/runtime.js",
         "src/content.js"
       ],
       "run_at": "document_start",

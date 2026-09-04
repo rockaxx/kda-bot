@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  planEmergencyEscape,
   planFleePoint,
   planKitePoint,
   selectEdgeNpc
@@ -227,4 +228,34 @@ test("flee point moves away from the nearby NPC centroid", () => {
 
   assert.equal(result.status, "safe");
   assert.ok(result.point.x < 0);
+});
+
+test("emergency escape chooses the widest gap instead of standing still", () => {
+  const entities = [
+    { id: "west", type: "npc", x: -300, y: 0, alive: true },
+    { id: "north", type: "npc", x: 0, y: -300, alive: true },
+    { id: "south", type: "npc", x: 0, y: 300, alive: true }
+  ];
+
+  const result = planEmergencyEscape(player, entities, settings, null);
+
+  assert.equal(result.status, "escape");
+  assert.equal(result.reason, "widest-cluster-gap");
+  assert.ok(result.point.x > 1000);
+  assert.ok(Math.abs(result.point.y) < 1);
+});
+
+test("emergency escape still moves when every direction violates danger radius", () => {
+  const entities = Array.from({ length: 16 }, (_, index) => ({
+    id: `ring-${index}`,
+    type: "npc",
+    x: 300 * Math.cos((index * Math.PI) / 8),
+    y: 300 * Math.sin((index * Math.PI) / 8),
+    alive: true
+  }));
+
+  const result = planEmergencyEscape(player, entities, settings, null);
+
+  assert.equal(result.status, "escape");
+  assert.ok(Math.hypot(result.point.x, result.point.y) > 1000);
 });
