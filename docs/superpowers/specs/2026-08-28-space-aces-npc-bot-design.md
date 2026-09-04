@@ -39,7 +39,7 @@ recovery threshold is reached.
 
 The inspected client is a browser application rendered with PIXI. The current
 decrypted local reference is approximately 2.2 MB, matches client version
-`1.9.0.049`, and is strongly obfuscated. The live game includes map, ship,
+`1.9.0.051`, and is strongly obfuscated. The live game includes map, ship,
 target, QuickFire, input, and entity systems inside a JavaScript module closure.
 The loader fetches and decrypts the game bundle in the browser before importing
 it from a Blob URL. A normal isolated content script therefore cannot rely on
@@ -342,6 +342,6 @@ coordinates and an alive player. Stop, faults, unload, and the stale-snapshot
 watchdog disarm actions and request target/movement cleanup. `Shift+Escape` is
 the emergency keyboard stop.
 
-The structural fingerprint for client `1.9.0.049` supplies that exact version
+The structural fingerprint for client `1.9.0.051` supplies that exact version
 when the decrypted bundle contains no literal build marker. Unknown structural
 fingerprints remain unsupported and cannot arm active mode.

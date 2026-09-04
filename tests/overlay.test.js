@@ -94,15 +94,15 @@ test("client source export takes priority over fallback diagnostic JSON", () => 
 
 test("only the current patched client enables the adapter gate", () => {
   assert.equal(
-    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.049" }),
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.051" }),
     true
   );
   assert.equal(
-    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.045" }),
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.049" }),
     false
   );
   assert.equal(
-    isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.9.0.049" }),
+    isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.9.0.051" }),
     false
   );
 });

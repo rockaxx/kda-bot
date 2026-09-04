@@ -15,7 +15,7 @@
     ["movementIntervalMs", "Move interval ms", "number"],
     ["targetBlacklistMs", "Blacklist ms", "number"]
   ]);
-  const EXPECTED_CLIENT_VERSION = "1.9.0.049";
+  const EXPECTED_CLIENT_VERSION = "1.9.0.051";
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);

@@ -18,6 +18,13 @@ const currentRoots =
   "_0x1e1267['followX'];_0x313249['handleWriteLog'];" +
   "_0x2e4b9e['initiateConnection']();";
 
+const latestRoots =
+  "let _0x312959,_0x3154af,_0x4e6c8d,_0x1db4fd,_0x5608bd,_0x27bad5,_0x4bfb8d;" +
+  "_0x27bad5['mapId'];_0x4e6c8d['ship'];" +
+  "_0x4bfb8d['gamepadTargeter'];_0x312959['initListeners'];" +
+  "_0x5608bd['followX'];_0x3154af['handleWriteLog'];" +
+  "_0x1db4fd['initiateConnection']();";
+
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
 
@@ -36,34 +43,34 @@ test("accepts a renamed version variable when the structural roots match", () =>
   assert.match(result.source, /version:"1\.9\.0\.046"/);
 });
 
-test("patches current client with its exact six root symbols", () => {
+test("patches current client with its exact seven root symbols", () => {
   const result = patchGameSource(
-    `const _0xcurrent='1.9.0.049';${currentRoots}`
+    `const _0xcurrent='1.9.0.051';${latestRoots}`
   );
 
   assert.equal(result.status, "patched");
-  assert.equal(result.version, "1.9.0.049");
-  assert.match(result.source, /get input\(\).*_0xc13e48/s);
-  assert.match(result.source, /get ui\(\).*_0x313249/s);
-  assert.match(result.source, /get user\(\).*_0x3d592/s);
-  assert.match(result.source, /get camera\(\).*_0x1e1267/s);
-  assert.match(result.source, /get world\(\).*_0x8541dd/s);
-  assert.match(result.source, /get renderer\(\).*_0x5d1a8d/s);
-  assert.match(result.source, /get network\(\).*_0x2e4b9e/s);
+  assert.equal(result.version, "1.9.0.051");
+  assert.match(result.source, /get input\(\).*_0x312959/s);
+  assert.match(result.source, /get ui\(\).*_0x3154af/s);
+  assert.match(result.source, /get user\(\).*_0x4e6c8d/s);
+  assert.match(result.source, /get camera\(\).*_0x5608bd/s);
+  assert.match(result.source, /get world\(\).*_0x27bad5/s);
+  assert.match(result.source, /get renderer\(\).*_0x4bfb8d/s);
+  assert.match(result.source, /get network\(\).*_0x1db4fd/s);
 });
 
 test("uses the known current fingerprint version when source has no literal", () => {
-  const result = patchGameSource(currentRoots);
+  const result = patchGameSource(latestRoots);
 
   assert.equal(result.status, "patched");
-  assert.equal(result.version, "1.9.0.049");
+  assert.equal(result.version, "1.9.0.051");
   assert.equal(result.reason, "recognized-structural-client");
-  assert.match(result.source, /version:"1\.9\.0\.049"/);
+  assert.match(result.source, /version:"1\.9\.0\.051"/);
 });
 
 test("rejects a current-like fingerprint without the mapped network root", () => {
-  const withoutNetwork = currentRoots.replace(
-    "_0x2e4b9e['initiateConnection']();",
+  const withoutNetwork = latestRoots.replace(
+    "_0x1db4fd['initiateConnection']();",
     ""
   );
 

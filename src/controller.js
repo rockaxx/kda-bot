@@ -9,7 +9,7 @@
 })(typeof window === "object" ? window : null, function createApi(planner) {
   "use strict";
 
-  const EXPECTED_CLIENT_VERSION = "1.9.0.049";
+  const EXPECTED_CLIENT_VERSION = "1.9.0.051";
   const TARGET_CONFIRMATION_TIMEOUT_MS = 1000;
   const MAX_TARGET_SELECTION_ATTEMPTS = 3;
   const {
