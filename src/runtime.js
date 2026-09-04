@@ -26,6 +26,7 @@
     onChange = () => {}
   }) {
     let active = false;
+    let suspendedReason = null;
     let lastSnapshotAt = null;
     const watchdogIntervalMs = Math.min(
       500,
@@ -42,6 +43,7 @@
 
     function disarm(reason, preserveFault = false) {
       active = false;
+      suspendedReason = null;
       if (!preserveFault) {
         try {
           controller.stop(reason);
@@ -77,10 +79,53 @@
       }
     }
 
+    function suspend(reason) {
+      if (!active || suspendedReason !== null) return;
+      suspendedReason = reason;
+      try {
+        controller.stop(reason);
+      } catch (_) {}
+      try {
+        bridge.sendAction({ type: "disarm" });
+      } catch (_) {
+        try {
+          logger.add("action-error", {
+            type: "disarm",
+            reason: "bridge-exception"
+          });
+        } catch (_) {}
+      }
+      try {
+        logger.add("mode", { mode: "SUSPENDED", state: "waiting", reason });
+      } catch (_) {}
+      try {
+        onChange();
+      } catch (_) {
+        disarm("runtime-callback-exception");
+      }
+    }
+
+    function resume(value) {
+      try {
+        controller.start();
+        bridge.sendAction({ type: "arm" });
+        logger.add("mode", {
+          mode: "ACTIVE",
+          state: "resumed",
+          reason: suspendedReason
+        });
+        suspendedReason = null;
+        processSnapshot(value);
+      } catch (_) {
+        disarm("runtime-callback-exception");
+      }
+    }
+
     function start(value) {
       if (!value || active) return false;
       try {
         active = true;
+        suspendedReason = null;
         lastSnapshotAt = now();
         controller.start();
         bridge.sendAction({ type: "arm" });
@@ -100,7 +145,11 @@
     function receiveSnapshot(value) {
       try {
         lastSnapshotAt = now();
-        if (active) processSnapshot(value);
+        if (active && suspendedReason !== null) {
+          resume(value);
+        } else if (active) {
+          processSnapshot(value);
+        }
         onChange();
       } catch (_) {
         disarm("runtime-callback-exception");
@@ -124,16 +173,17 @@
       const checkedAt = now();
       const schedulerDelay = checkedAt - expectedWatchdogAt;
       expectedWatchdogAt = checkedAt + watchdogIntervalMs;
-      if (active && schedulerDelay > staleAfterMs) {
-        disarm("watchdog-scheduler-delay");
+      if (active && suspendedReason === null && schedulerDelay > staleAfterMs) {
+        suspend("watchdog-scheduler-delay");
         return;
       }
       if (
         active &&
+        suspendedReason === null &&
         lastSnapshotAt !== null &&
         checkedAt - lastSnapshotAt > staleAfterMs
       ) {
-        disarm("stale-snapshot-watchdog");
+        suspend("stale-snapshot-watchdog");
       }
     }, watchdogIntervalMs);
 
@@ -144,7 +194,11 @@
 
     return {
       destroy,
+      getState: () => suspendedReason === null
+        ? controller.getState()
+        : { name: "SUSPENDED", reason: suspendedReason },
       isActive: () => active,
+      isSuspended: () => suspendedReason !== null,
       receiveActionResult,
       receiveSnapshot,
       start,

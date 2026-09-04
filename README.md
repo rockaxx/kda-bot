@@ -20,8 +20,9 @@ kites through the game's normal movement path.
   Routes toward radiation are shortened to keep a 300-unit safety margin.
 - Dense NPC surrounds trigger `ESCAPING_CLUSTER`: the bot repeatedly moves
   through the widest available gap instead of cancelling movement and standing.
-- The MAIN-world action adapter starts disarmed. STOP, faults, stale snapshots,
-  and page unload disarm it and cancel current target/movement.
+- The MAIN-world action adapter starts disarmed. Background timer/snapshot
+  delays temporarily suspend it; the next fresh snapshot automatically resumes
+  the requested run. STOP, critical faults, and page unload end the run.
 - First use must be supervised before any unattended session.
 
 ## Verify locally
@@ -88,6 +89,6 @@ disk. Saved extension settings can be removed with Chrome's extension data.
 ## Known live gate
 
 Automated/static tests verify the action contract, NPC-only checks, controller,
-STOP cleanup, and watchdog. Real browser/game behavior still requires the
+STOP cleanup, watchdog suspension, and automatic resume. Real browser/game behavior still requires the
 supervised steps above after every client update. Do not assume a new client
 version is compatible until its structural fingerprint is reviewed.

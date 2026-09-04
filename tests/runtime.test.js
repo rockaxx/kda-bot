@@ -102,16 +102,28 @@ test("controller fault disarms active runtime", () => {
   assert.deepEqual(item.sent.at(-1), { type: "disarm" });
 });
 
-test("watchdog disarms when no fresh snapshot arrives", () => {
+test("watchdog suspends on stale snapshots and automatically resumes", () => {
   const item = fixture();
   item.runtime.start(snapshot());
   item.setClock(3001);
 
   item.watchdog();
 
-  assert.equal(item.runtime.isActive(), false);
+  assert.equal(item.runtime.isActive(), true);
+  assert.equal(item.runtime.isSuspended(), true);
+  assert.deepEqual(item.runtime.getState(), {
+    name: "SUSPENDED",
+    reason: "stale-snapshot-watchdog"
+  });
   assert.equal(item.controller.getState().reason, "stale-snapshot-watchdog");
   assert.deepEqual(item.sent.at(-1), { type: "disarm" });
+
+  item.setClock(3100);
+  item.runtime.receiveSnapshot(snapshot({ timestamp: 3100, entities: [] }));
+
+  assert.equal(item.runtime.isSuspended(), false);
+  assert.equal(item.runtime.getState().name, "SEARCHING");
+  assert.deepEqual(item.sent.at(-1), { type: "arm" });
 });
 
 test("failed MAIN-world action disarms runtime", () => {
@@ -154,7 +166,7 @@ test("runtime disarms when controller processing throws", () => {
   assert.deepEqual(sent.at(-1), { type: "disarm" });
 });
 
-test("watchdog detects scheduler suspension even after a fresh snapshot", () => {
+test("watchdog scheduler delay suspends without ending the requested run", () => {
   const item = fixture();
   item.runtime.start(snapshot());
   item.setClock(4000);
@@ -162,8 +174,29 @@ test("watchdog detects scheduler suspension even after a fresh snapshot", () => 
 
   item.watchdog();
 
+  assert.equal(item.runtime.isActive(), true);
+  assert.equal(item.runtime.isSuspended(), true);
+  assert.deepEqual(item.runtime.getState(), {
+    name: "SUSPENDED",
+    reason: "watchdog-scheduler-delay"
+  });
+});
+
+test("explicit Stop while suspended prevents automatic restart", () => {
+  const item = fixture();
+  item.runtime.start(snapshot());
+  item.setClock(3001);
+  item.watchdog();
+
+  item.runtime.stop("user-stop");
+  const sentBeforeSnapshot = item.sent.length;
+  item.setClock(3100);
+  item.runtime.receiveSnapshot(snapshot({ timestamp: 3100 }));
+
   assert.equal(item.runtime.isActive(), false);
-  assert.equal(item.controller.getState().reason, "watchdog-scheduler-delay");
+  assert.equal(item.runtime.isSuspended(), false);
+  assert.equal(item.controller.getState().reason, "user-stop");
+  assert.equal(item.sent.length, sentBeforeSnapshot);
 });
 
 test("Shift+Escape performs emergency stop and detaches cleanly", () => {

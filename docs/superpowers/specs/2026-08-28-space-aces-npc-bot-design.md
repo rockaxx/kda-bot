@@ -225,10 +225,11 @@ faults. It must not log transport payloads, credentials, tokens, chat, or
 personal data.
 
 The watchdog checks snapshot age and scheduling delay independently of snapshot
-arrival. A stale snapshot,
-disconnect, extension/adaptor exception, player death, or excessive background
-tab throttling stops all automation. The Stop control and emergency keyboard
-shortcut cancel timers, movement, target state, and attack retries immediately.
+arrival. Stale snapshots or background-tab throttling transition the requested
+run to `SUSPENDED`, disarm actions, and clean up movement/target state. The next
+fresh snapshot automatically arms and resumes the run. Disconnect, adapter
+exception, player death, unsupported client, explicit Stop, and the emergency
+keyboard shortcut end automation.
 
 ## Client update policy
 
@@ -338,8 +339,9 @@ Stop/cleanup calls
 independently calls `user.forceMovement(currentX, currentY)` for server sync. Target and
 ammo actions re-read `world.MAP_SHIPS` and require `isNpc === true`, alive HP,
 and a live player immediately before dispatch. Movement requires finite world
-coordinates and an alive player. Stop, faults, unload, and the stale-snapshot
-watchdog disarm actions and request target/movement cleanup. `Shift+Escape` is
+coordinates and an alive player. Stop, faults, unload, and watchdog suspension
+disarm actions and request target/movement cleanup. Watchdog suspension keeps
+the requested run active and automatically resumes on a fresh snapshot. `Shift+Escape` is
 the emergency keyboard stop.
 
 The structural fingerprint for client `1.9.0.051` supplies that exact version

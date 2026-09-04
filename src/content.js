@@ -50,7 +50,7 @@
         diagnostic,
         clientSource,
         snapshot,
-        state: controller.getState(),
+        state: runtime ? runtime.getState() : controller.getState(),
         entries: logger.list(),
         active: runtime ? runtime.isActive() : false
       };
