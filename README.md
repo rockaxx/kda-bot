@@ -1,4 +1,4 @@
-# Space Aces NPC Bot
+# KDA
 
 Chrome extension for the authorized Space Aces NPC-only bot. The current build
 is **Phase 3 / ACTIVE**: it recognizes client `1.9.0.049`, detects the current
@@ -45,7 +45,7 @@ Expected: all tests pass and `extension check passed`.
 6. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
-The **Space Aces NPC Bot — ACTIVE** panel should appear in the top-right.
+The **KDA** panel should appear in the top-right. Press `N` to hide or show it.
 The adapter row should become `supported` for client `1.9.0.049`. Map, HP, and
 NPC count should populate. **START BOT** then becomes enabled.
 
@@ -82,7 +82,7 @@ is ignored by Git.
 ## Rollback
 
 For immediate rollback, open `chrome://extensions` and disable or remove
-**Space Aces NPC Bot**, then reload the game tab. No game files are modified on
+**KDA**, then reload the game tab. No game files are modified on
 disk. Saved extension settings can be removed with Chrome's extension data.
 
 ## Known live gate

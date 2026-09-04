@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Space Aces NPC Bot",
+  "name": "KDA",
   "version": "0.1.0",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],

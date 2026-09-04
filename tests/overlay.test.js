@@ -7,8 +7,36 @@ const {
   formatMapStatus,
   isSupportedDiagnostic,
   keepHostMounted,
+  createPanelState,
+  shouldToggleOverlay,
   whenDocumentReady
 } = require("../src/overlay.js");
+
+test("plain N toggles panel but typing and modified shortcuts do not", () => {
+  assert.equal(shouldToggleOverlay({ code: "KeyN", repeat: false, target: { tagName: "DIV" } }), true);
+  assert.equal(shouldToggleOverlay({ code: "KeyN", repeat: true, target: { tagName: "DIV" } }), false);
+  assert.equal(shouldToggleOverlay({ code: "KeyN", ctrlKey: true, target: { tagName: "DIV" } }), false);
+  assert.equal(shouldToggleOverlay({ code: "KeyN", target: { tagName: "INPUT" } }), false);
+  assert.equal(shouldToggleOverlay({ code: "KeyN", target: { tagName: "TEXTAREA" } }), false);
+  assert.equal(shouldToggleOverlay({ code: "KeyN", target: { isContentEditable: true, tagName: "DIV" } }), false);
+  assert.equal(shouldToggleOverlay({
+    code: "KeyN",
+    target: { tagName: "SA-BOT-ROOT" },
+    composedPath: () => [{ tagName: "INPUT" }, { tagName: "SA-BOT-ROOT" }]
+  }), false);
+  assert.equal(shouldToggleOverlay({ code: "KeyM", target: { tagName: "DIV" } }), false);
+});
+
+test("panel state toggles visibility and selects only known tabs", () => {
+  const state = createPanelState(["dashboard", "settings"]);
+  assert.deepEqual(state.read(), { visible: true, activeTab: "dashboard" });
+  state.toggle();
+  assert.deepEqual(state.read(), { visible: false, activeTab: "dashboard" });
+  assert.equal(state.selectTab("settings"), true);
+  assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
+  assert.equal(state.selectTab("unknown"), false);
+  assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
+});
 
 test("settings draft survives live renders until successful save", () => {
   const listeners = {};
