@@ -39,3 +39,25 @@ test("main and isolated APIs use separate browser namespaces", () => {
     pageWindow.__SA_BOT_ISOLATED_V1__
   );
 });
+
+test("isolated namespace mounts a visible bootstrap status", () => {
+  let mounted = null;
+  const document = {
+    documentElement: {
+      appendChild(node) {
+        mounted = node;
+        node.isConnected = true;
+      }
+    },
+    createElement() {
+      return { style: {}, isConnected: false };
+    },
+    getElementById() { return null; }
+  };
+  const context = vm.createContext({ window: {}, document });
+
+  runBrowserScript(context, "src/namespace.js");
+
+  assert.equal(mounted.id, "sa-bot-bootstrap-status");
+  assert.equal(mounted.textContent, "KDA loading…");
+});

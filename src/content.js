@@ -9,7 +9,15 @@
   ];
   // An unpacked extension can briefly run new files with its previously
   // registered manifest. Exit cleanly until Chrome reloads the full script set.
-  if (!requiredApi.every(name => typeof api[name] === "function")) return;
+  const missingApi = requiredApi.filter(name => typeof api[name] !== "function");
+  if (missingApi.length) {
+    const status = typeof document === "object" &&
+      typeof document.getElementById === "function"
+      ? document.getElementById("sa-bot-bootstrap-status")
+      : null;
+    if (status) status.textContent = `KDA blocked — missing: ${missingApi.join(", ")}`;
+    return;
+  }
   const CKDA_LEASE_RENEW_MS = 15000;
   const CKDA_UI_STALE_MS = 2000;
   const ckdaNow = api.createMonotonicEpochClock(root.performance);
@@ -246,6 +254,9 @@
         URL.revokeObjectURL(url);
       }
     });
+    if (typeof document.getElementById === "function") {
+      document.getElementById("sa-bot-bootstrap-status")?.remove();
+    }
     runtime = buildRuntime(controller);
     removeEmergencyStop = api.installEmergencyStop(root, () => {
       if (runtime && runtime.isActive()) runtime.stop("emergency-shortcut");
