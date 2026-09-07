@@ -262,6 +262,10 @@
         color: #fb7185; background: rgba(225,29,72,.13); font-size: 16px; }
       .mode-name { font-size: 13px; font-weight: 800; color: #fff1f2; overflow-wrap: anywhere; }
       .mode-reason { color: #a4777f; font-size: 10px; overflow-wrap: anywhere; }
+      .ckda-visual { display: flex; align-items: center; gap: 10px; margin-bottom: 11px;
+        padding: 9px 10px; border: 1px solid rgba(244,63,94,.16); border-radius: 11px;
+        background: rgba(29,7,13,.54); color: #a4777f; font-size: 10px; }
+      .ckda-visual img { width: 46px; height: 32px; object-fit: contain; flex: none; }
       .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 11px 0; }
       button.action { min-height: 39px; border: 0; border-radius: 10px; cursor: pointer;
         color: white; font: inherit; font-weight: 850; letter-spacing: .03em;
@@ -461,10 +465,31 @@
     const ckdaView = documentRef.createElement("div");
     ckdaView.className = "view";
     ckdaView.dataset.view = "ckda";
+    const ckdaVisual = documentRef.createElement("div");
+    ckdaVisual.className = "ckda-visual";
+    const ckdaImage = documentRef.createElement("img");
+    ckdaImage.alt = "C-KDA";
+    const ckdaImageFallback = documentRef.createElement("span");
+    ckdaImageFallback.textContent = "C-KDA visual unavailable";
+    const ckdaAssetUrl = typeof chrome !== "undefined" && chrome.runtime &&
+      typeof chrome.runtime.getURL === "function"
+      ? chrome.runtime.getURL("assets/c-kda.gif")
+      : "";
+    if (ckdaAssetUrl) {
+      ckdaImage.src = ckdaAssetUrl;
+      ckdaImageFallback.hidden = true;
+    } else {
+      ckdaImage.hidden = true;
+    }
+    ckdaImage.addEventListener("error", () => {
+      ckdaImage.hidden = true;
+      ckdaImageFallback.hidden = false;
+    });
+    ckdaVisual.append(ckdaImage, ckdaImageFallback);
     const ckdaTitle = documentRef.createElement("div");
     ckdaTitle.className = "section-title";
     ckdaTitle.textContent = "Player marker controls";
-    ckdaView.append(ckdaTitle, ckdaFields);
+    ckdaView.append(ckdaVisual, ckdaTitle, ckdaFields);
     const ckdaControls = documentRef.createElement("div");
     ckdaControls.className = "controls";
     const saveCkdaButton = makeButton("SAVE C-KDA", "action", ckdaControls);

@@ -5,6 +5,10 @@ is **Phase 3 / ACTIVE**: it recognizes client `1.9.0.051`, detects the current
 map automatically, selects verified NPCs, presses the configured ammo bind, and
 kites through the game's normal movement path.
 
+It also includes a separate C-KDA observation workspace for the same supported
+client. C-KDA displays only sanitized player-marker observations; it never
+feeds players into BOT targeting or actions.
+
 ## Current safety boundary
 
 - Scope is only `https://steam.space-aces.com/gameNew*`.
@@ -24,6 +28,29 @@ kites through the game's normal movement path.
   delays temporarily suspend it; the next fresh snapshot automatically resumes
   the requested run. STOP, critical faults, and page unload end the run.
 - First use must be supervised before any unattended session.
+
+## C-KDA controls and limits
+
+The panel has three tabs: **BOT**, **C-KDA**, and **Settings**. `N` hides or
+shows the complete panel, except while focus is in a text, number, select, or
+editable field.
+
+The C-KDA tab controls marker visibility, masked-only/all-player display,
+shape, ally/enemy colours, size, opacity, EMP/ISH labels and durations, and a
+client-local Premium test override. `CLEAR MARKERS` discards the current local
+observations. EMP/ISH labels are countdowns from the observed end time, rounded
+up to whole seconds; they are not server actions or ability activation.
+
+Premium override is a reversible local presentation test only. On disable,
+page hide, navigation, or extension cleanup, C-KDA restores the original
+`isPremium` property descriptor/value and calls the original update path with
+the prior boolean value when available. It does not change server entitlement.
+
+BOT remains NPC-only: C-KDA player observations cannot become planner targets,
+movement targets, or actions. In `Masked only` mode, markers depend on the
+server/client data exposing a masked state. If that state is unavailable or the
+client changes its structure, C-KDA hides those observations rather than
+guessing.
 
 ## Verify locally
 
@@ -49,6 +76,12 @@ Expected: all tests pass and `extension check passed`.
 The **KDA** panel should appear in the top-right. Press `N` to hide or show it.
 The adapter row should become `Ready` for client `1.9.0.051`. Map, HP, and
 NPC count should populate. **START BOT** then becomes enabled.
+
+If C-KDA shows **Unsupported client**, confirm the page is fully reloaded after
+extension reload and that the live client is exactly `1.9.0.051`. Use **Export
+data** to capture the sanitized diagnostic, then review the adapter fingerprint
+before changing any support marker. Do not enable C-KDA/Premium workarounds for
+another client version; BOT remains fail-closed on unknown builds.
 
 ## Configure and run
 

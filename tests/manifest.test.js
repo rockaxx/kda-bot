@@ -1,9 +1,23 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+const cKdaAsset = "assets/c-kda.gif";
+const forbiddenGlobalHooks = [
+  /JSON\.parse\s*=/,
+  /Response\.prototype\.json\s*=/,
+  /Object\.defineProperty\s*=/,
+  /Reflect\.defineProperty\s*=/,
+  /window\.Function\s*=/,
+  /Object\.defineProperty\s*\(\s*JSON\s*,\s*["']parse["']/,
+  /Object\.defineProperty\s*\(\s*Response\.prototype\s*,\s*["']json["']/,
+  /Object\.defineProperty\s*\(\s*Object\s*,\s*["']defineProperty["']/,
+  /Object\.defineProperty\s*\(\s*Reflect\s*,\s*["']defineProperty["']/,
+  /Object\.defineProperty\s*\(\s*window\s*,\s*["']Function["']/
+];
 
 test("manifest is scoped to the game and has no sensitive permissions", () => {
   const manifest = JSON.parse(
@@ -41,6 +55,48 @@ test("every declared script exists", () => {
       assert.equal(fs.existsSync(path.join(root, script)), true, script);
     }
   }
+});
+
+test("packages the local C-KDA GIF as a game-scoped web resource", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, "manifest.json"), "utf8")
+  );
+  const resource = (manifest.web_accessible_resources || []).find((entry) =>
+    Array.isArray(entry.resources) && entry.resources.includes(cKdaAsset)
+  );
+
+  assert.ok(resource, "C-KDA GIF must be declared as a web-accessible resource");
+  assert.deepEqual(resource.matches, ["https://steam.space-aces.com/gameNew*"]);
+});
+
+test("packages the validated C-KDA GIF binary", () => {
+  const asset = fs.readFileSync(path.join(root, cKdaAsset));
+
+  assert.equal(asset.byteLength, 220122);
+  assert.equal(["GIF87a", "GIF89a"].includes(asset.subarray(0, 6).toString("ascii")), true);
+});
+
+test("maintained extension source does not install broad global hooks", () => {
+  const sourceDir = path.join(root, "src");
+  const source = fs.readdirSync(sourceDir)
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => fs.readFileSync(path.join(sourceDir, name), "utf8"))
+    .join("\n");
+
+  for (const pattern of forbiddenGlobalHooks) {
+    assert.equal(pattern.test(source), false, `forbidden platform hook: ${pattern}`);
+  }
+});
+
+test("extension checker reports C-KDA package safety checks", () => {
+  const output = childProcess.execFileSync(
+    process.execPath,
+    ["scripts/check-extension.js"],
+    { cwd: root, encoding: "utf8" }
+  );
+
+  assert.match(output, /C-KDA asset/i);
+  assert.match(output, /extension check passed/i);
 });
 
 test("loads C-KDA contracts before their MAIN and isolated consumers", () => {

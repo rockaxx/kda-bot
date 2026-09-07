@@ -271,6 +271,32 @@ test("C-KDA controls bind every label and expose schema-aligned numeric bounds",
   }
 });
 
+test("C-KDA visual uses packaged runtime URL and reveals text on image failure", () => {
+  const originalChrome = global.chrome;
+  const urls = [];
+  const originalObserver = global.MutationObserver;
+  global.chrome = { runtime: { getURL(path) { urls.push(path); return `chrome-extension://test/${path}`; } } };
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({ documentRef });
+    const image = elements.find((element) => element.tagName === "IMG");
+    const fallback = elements.find((element) => element.textContent === "C-KDA visual unavailable");
+
+    assert.deepEqual(urls, ["assets/c-kda.gif"]);
+    assert.equal(image.src, "chrome-extension://test/assets/c-kda.gif");
+    assert.equal(fallback.hidden, true);
+    image.listeners.error();
+    assert.equal(image.hidden, true);
+    assert.equal(fallback.hidden, false);
+    overlay.destroy();
+  } finally {
+    if (originalChrome === undefined) delete global.chrome;
+    else global.chrome = originalChrome;
+    global.MutationObserver = originalObserver;
+  }
+});
+
 test("settings draft survives live renders until successful save", () => {
   const listeners = {};
   const inputs = {};
