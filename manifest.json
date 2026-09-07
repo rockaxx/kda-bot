@@ -25,6 +25,8 @@
         "src/ckda-schema.js",
         "src/ckda-settings.js",
         "src/ckda-core.js",
+        "src/ckda-bridge.js",
+        "src/ckda-canvas.js",
         "src/schemas.js",
         "src/settings.js",
         "src/geometry.js",
