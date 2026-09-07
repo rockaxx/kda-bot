@@ -29,6 +29,12 @@
     ["ishCooldownMs", "ISH duration ms", "number"],
     ["premiumOverride", "Premium override", "checkbox"]
   ]);
+  const CKDA_NUMBER_ATTRIBUTES = Object.freeze({
+    sizePx: { min: "3", max: "30", step: "1" },
+    opacity: { min: "0.1", max: "1", step: "0.1" },
+    empCooldownMs: { min: "1000", max: "120000", step: "1000" },
+    ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
+  });
   const EXPECTED_CLIENT_VERSION = "1.9.0.051";
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
@@ -92,6 +98,8 @@
 
   function formatCkdaStatus(status, snapshot) {
     const state = typeof status === "string" ? status : status && status.state;
+    if (snapshot?.premiumState === "active") return "Premium override active";
+    if (snapshot?.premiumState === "unsupported") return "Premium override unsupported";
     const labels = {
       ready: "Ready",
       waiting: "Waiting for game",
@@ -102,8 +110,6 @@
       "premium-unsupported": "Premium override unsupported"
     };
     if (labels[state]) return labels[state];
-    if (snapshot?.premiumState === "active") return "Premium override active";
-    if (snapshot?.premiumState === "unsupported") return "Premium override unsupported";
     if (!snapshot || snapshot.connectionState !== "connected") return "Waiting for game";
     if (!Array.isArray(snapshot.players) || snapshot.players.length === 0) {
       return "No player data";
@@ -362,7 +368,10 @@
         }
       } else {
         input.type = type;
+        if (type === "number") Object.assign(input, CKDA_NUMBER_ATTRIBUTES[key]);
       }
+      input.id = `sa-ckda-${key}`;
+      label.htmlFor = input.id;
       input.dataset.ckdaSetting = key;
       ckdaInputs[key] = input;
       field.append(label, input);

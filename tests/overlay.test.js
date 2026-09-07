@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   canStartBot,
   createCkdaFormState,
+  createOverlay,
   createSettingsFormState,
   createExportFile,
   formatCkdaStatus,
@@ -13,6 +14,60 @@ const {
   shouldToggleOverlay,
   whenDocumentReady
 } = require("../src/overlay.js");
+
+function createOverlayDocument() {
+  const elements = [];
+  function createElement(tagName) {
+    const classes = new Set();
+    const element = {
+      children: [],
+      classList: {
+        add(name) { classes.add(name); },
+        toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
+      },
+      dataset: {},
+      isConnected: false,
+      listeners: {},
+      style: {},
+      tagName: tagName.toUpperCase(),
+      addEventListener(name, handler) { this.listeners[name] = handler; },
+      append(...values) { values.forEach((value) => this.appendChild(value)); },
+      prepend(...values) {
+        values.reverse().forEach((value) => {
+          if (value && typeof value === "object") value.parentNode = this;
+          this.children.unshift(value);
+        });
+      },
+      appendChild(value) {
+        if (value && typeof value === "object") value.parentNode = this;
+        this.children.push(value);
+        return value;
+      },
+      attachShadow() {
+        return { append(...values) { this.children = values; } };
+      },
+      remove() { this.removed = true; }
+    };
+    elements.push(element);
+    return element;
+  }
+
+  return {
+    elements,
+    documentRef: {
+      body: {
+        appendChild(element) {
+          element.isConnected = true;
+          this.child = element;
+        }
+      },
+      createElement,
+      documentElement: {},
+      addEventListener() {},
+      removeEventListener() {}
+    }
+  };
+}
 
 test("plain N toggles panel but typing and modified shortcuts do not", () => {
   assert.equal(shouldToggleOverlay({ code: "KeyN", repeat: false, target: { tagName: "DIV" } }), true);
@@ -110,6 +165,56 @@ test("C-KDA status uses compact human-readable labels", () => {
   assert.equal(formatCkdaStatus("no-player-data"), "No player data");
   assert.equal(formatCkdaStatus("premium-active"), "Premium override active");
   assert.equal(formatCkdaStatus("premium-unsupported"), "Premium override unsupported");
+});
+
+test("C-KDA Premium snapshot state outranks ready and no-player-data status", () => {
+  const activeSnapshot = { connectionState: "connected", premiumState: "active", players: [] };
+  const unsupportedSnapshot = { connectionState: "connected", premiumState: "unsupported", players: [] };
+  assert.equal(formatCkdaStatus("ready", activeSnapshot), "Premium override active");
+  assert.equal(formatCkdaStatus("no-player-data", activeSnapshot), "Premium override active");
+  assert.equal(formatCkdaStatus("ready", unsupportedSnapshot), "Premium override unsupported");
+  assert.equal(formatCkdaStatus("no-player-data", unsupportedSnapshot), "Premium override unsupported");
+});
+
+test("C-KDA controls bind every label and expose schema-aligned numeric bounds", () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({
+      documentRef,
+      onStart() {},
+      onStop() {},
+      onSave() { return true; },
+      onExport() {}
+    });
+    const controls = elements.filter((element) => element.dataset.ckdaSetting);
+    assert.equal(controls.length, 12);
+    for (const control of controls) {
+      assert.ok(control.id, `${control.dataset.ckdaSetting} needs an id`);
+      assert.ok(
+        elements.some((element) => element.tagName === "LABEL" && element.htmlFor === control.id),
+        `${control.dataset.ckdaSetting} needs an associated label`
+      );
+    }
+    assert.deepEqual(
+      Object.fromEntries(
+        controls.filter((control) => control.type === "number").map((control) => [
+          control.dataset.ckdaSetting,
+          { min: control.min, max: control.max, step: control.step }
+        ])
+      ),
+      {
+        sizePx: { min: "3", max: "30", step: "1" },
+        opacity: { min: "0.1", max: "1", step: "0.1" },
+        empCooldownMs: { min: "1000", max: "120000", step: "1000" },
+        ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
+      }
+    );
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
 });
 
 test("settings draft survives live renders until successful save", () => {
