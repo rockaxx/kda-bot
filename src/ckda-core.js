@@ -56,15 +56,37 @@
   }
 
   function projectPlayer(entity) {
-    try {
-      const point = entity.renderer.wrapper.toGlobal({ x: 0, y: 0 });
-      if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-        return null;
+    const displayObjects = [
+      entity && entity.wrapper,
+      entity && entity.renderer && entity.renderer.wrapper
+    ];
+
+    for (const displayObject of displayObjects) {
+      if (!displayObject) continue;
+      try {
+        let point = null;
+        if (typeof displayObject.toGlobal === "function") {
+          point = displayObject.toGlobal({ x: 0, y: 0 });
+        } else if (typeof displayObject.getGlobalPosition === "function") {
+          point = displayObject.getGlobalPosition();
+        } else if (
+          displayObject.worldTransform &&
+          Number.isFinite(displayObject.worldTransform.tx) &&
+          Number.isFinite(displayObject.worldTransform.ty)
+        ) {
+          point = {
+            x: displayObject.worldTransform.tx,
+            y: displayObject.worldTransform.ty
+          };
+        }
+        if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+          return { screenX: point.x, screenY: point.y };
+        }
+      } catch (_) {
+        // Try the next compatible PIXI display-object path.
       }
-      return { screenX: point.x, screenY: point.y };
-    } catch (_) {
-      return null;
     }
+    return null;
   }
 
   function filterVisiblePlayers(

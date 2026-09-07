@@ -107,6 +107,15 @@ test("projects player origin through renderer wrapper", () => {
   assert.equal(projectPlayer({ renderer: { wrapper: { toGlobal() { throw new Error("lost renderer"); } } } }), null);
 });
 
+test("projects 1.9.0.052 ships through their root wrapper", () => {
+  const entity = {
+    wrapper: { toGlobal: () => ({ x: 321.25, y: 654.5 }) },
+    renderer: { wrapper: {} }
+  };
+
+  assert.deepEqual(projectPlayer(entity), { screenX: 321.25, screenY: 654.5 });
+});
+
 test("filters visible cloaked players without changing input records", () => {
   const players = [
     { id: 1, screenX: 20, screenY: 20, cloaked: true, observedAt: 900 },
