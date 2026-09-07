@@ -6,12 +6,15 @@
   let pendingSnapshot = null;
   let pendingDiagnostic = null;
   let pendingSource = null;
+  let pendingCkdaSnapshot = null;
   const pendingActionResults = [];
   let receiveSnapshot = (value) => { pendingSnapshot = value; };
   let receiveDiagnostic = (value) => { pendingDiagnostic = value; };
   let receiveSource = (value) => { pendingSource = value; };
   let receiveActionResult = (value) => { pendingActionResults.push(value); };
-  let cleanup = () => bridge.stop();
+  let receiveCkdaSnapshot = (value) => { pendingCkdaSnapshot = value; };
+  let receiveCkdaResult = () => {};
+  let cleanup = () => { bridge.stop(); ckdaBridge.destroy(); };
   let removeEmergencyStop = () => {};
   let unloaded = false;
   const bridge = api.createBridge({
@@ -22,14 +25,30 @@
     onActionResult(value) { receiveActionResult(value); }
   });
   bridge.start();
+  let ckdaStartupFailed = false;
+  let ckdaBridge = { sendCommand() {}, destroy() {} };
+  try {
+    ckdaBridge = api.createCkdaBridge({
+      windowRef: root,
+      onSnapshot(value) { if (!unloaded) receiveCkdaSnapshot(value); },
+      onResult(value) { if (!unloaded) receiveCkdaResult(value); }
+    });
+  } catch (_) {
+    ckdaStartupFailed = true;
+  }
 
-  root.addEventListener("beforeunload", () => {
+  function unload() {
+    if (unloaded) return;
     unloaded = true;
     cleanup();
-  }, { once: true });
+    root.removeEventListener("pagehide", unload);
+    root.removeEventListener("beforeunload", unload);
+  }
+  root.addEventListener("beforeunload", unload);
+  root.addEventListener("pagehide", unload);
 
   api.whenDocumentReady(document, () => {
-    chrome.storage.local.get(["settings"], (stored) => {
+    chrome.storage.local.get(["settings", "ckdaSettings"], (stored = {}) => {
     if (unloaded) return;
     let normalized = api.normalizeSettings(stored.settings || {});
     let settings = normalized.value;
@@ -39,6 +58,15 @@
     let clientSource = null;
     let snapshot = null;
     let runtime = null;
+    let ckdaSettings = api.normalizeCkdaSettings(stored.ckdaSettings || {}).value;
+    let ckdaSnapshot = null;
+    let ckdaStatus = { state: ckdaStartupFailed ? "error" : "waiting-for-game" };
+    let ckdaCanvas = null;
+    try {
+      ckdaCanvas = api.createCkdaCanvas({ documentRef: document, windowRef: root });
+    } catch (_) {
+      ckdaStatus = { state: "error" };
+    }
 
     function model() {
       return {
@@ -50,6 +78,9 @@
         diagnostic,
         clientSource,
         snapshot,
+        ckdaSettings,
+        ckdaSnapshot,
+        ckdaStatus,
         state: runtime ? runtime.getState() : controller.getState(),
         entries: logger.list(),
         active: runtime ? runtime.isActive() : false
@@ -58,6 +89,34 @@
 
     function render() {
       overlay.render(model());
+    }
+
+    function ckdaAction(action) {
+      try { action(); } catch (_) { ckdaStatus = { state: "error" }; }
+      try { render(); } catch (_) { ckdaStatus = { state: "error" }; }
+    }
+
+    function configureCkda() {
+      ckdaBridge.sendCommand("configure-effects", {
+        empCooldownMs: ckdaSettings.empCooldownMs,
+        ishCooldownMs: ckdaSettings.ishCooldownMs
+      });
+      ckdaBridge.sendCommand("set-premium", { enabled: ckdaSettings.premiumOverride });
+      ckdaBridge.sendCommand("refresh");
+    }
+
+    function clearCkda() {
+      ckdaSnapshot = null;
+      ckdaCanvas?.clear();
+      ckdaStatus = { state: "waiting-for-game" };
+    }
+
+    function visibilityChanged() {
+      if (document.visibilityState !== "visible" || unloaded) return;
+      ckdaAction(() => {
+        clearCkda();
+        ckdaBridge.sendCommand("refresh");
+      });
     }
 
     function buildRuntime(nextController) {
@@ -97,6 +156,24 @@
         }
         render();
         return candidate.ok;
+      },
+      onSaveCkda(rawSettings) {
+        const candidate = api.normalizeCkdaSettings(rawSettings);
+        if (!candidate.ok) return false;
+        ckdaSettings = candidate.value;
+        ckdaAction(() => {
+          chrome.storage.local.set({ ckdaSettings: { ...ckdaSettings } });
+          configureCkda();
+          ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
+        });
+        return true;
+      },
+      onCkdaCommand(type) {
+        if (type !== "clear") return;
+        ckdaAction(() => {
+          clearCkda();
+          ckdaBridge.sendCommand("clear");
+        });
       },
       onExport() {
         const file = api.createExportFile({ clientSource, diagnostic });
@@ -142,20 +219,38 @@
       });
       render();
     };
+    receiveCkdaSnapshot = (value) => ckdaAction(() => {
+      const checked = api.validateCkdaSnapshot(value);
+      if (!checked.ok) return;
+      ckdaSnapshot = checked.value;
+      ckdaStatus = { state: ckdaSnapshot.players.length ? "ready" : "no-player-data" };
+      ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
+    });
+    receiveCkdaResult = (value) => ckdaAction(() => {
+      if (value.type === "ready") configureCkda();
+      else if (value.state === "unsupported-client") ckdaStatus = { state: value.state };
+    });
     if (pendingDiagnostic) receiveDiagnostic(pendingDiagnostic);
     if (pendingSource) receiveSource(pendingSource);
     if (pendingSnapshot) receiveSnapshot(pendingSnapshot);
+    if (pendingCkdaSnapshot) receiveCkdaSnapshot(pendingCkdaSnapshot);
     for (const result of pendingActionResults) receiveActionResult(result);
     pendingDiagnostic = null;
     pendingSource = null;
     pendingSnapshot = null;
+    pendingCkdaSnapshot = null;
     pendingActionResults.length = 0;
     render();
+    document.addEventListener("visibilitychange", visibilityChanged);
+    ckdaAction(configureCkda);
     cleanup = () => {
-      runtime.destroy();
-      removeEmergencyStop();
-      bridge.stop();
-      overlay.destroy();
+      document.removeEventListener("visibilitychange", visibilityChanged);
+      for (const release of [
+        () => runtime.destroy(), removeEmergencyStop, () => bridge.stop(),
+        () => ckdaBridge.destroy(), () => ckdaCanvas?.destroy(), () => overlay.destroy()
+      ]) {
+        try { release(); } catch (_) { /* Continue releasing independent resources. */ }
+      }
     };
     });
   });

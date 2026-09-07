@@ -2,12 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 const {
   createPremiumOverride,
   createCkdaSnapshot,
   findUniquePrototypeMethod,
   installEffectHooks,
-  startCkdaPublisher
+  startCkdaPublisher,
+  installCkda
 } = require("../src/ckda-main.js");
 
 function premiumRoots(user, version = "n1.9.0.051") {
@@ -542,4 +544,202 @@ test("publisher sends on cadence, clears cooldowns on world change, and stops", 
   assert.equal(clearedTimer, 9);
   scheduled.callback();
   assert.equal(messages.length, 4);
+});
+
+function installerWindow(roots) {
+  const listeners = new Map();
+  const timers = new Map();
+  const messages = [];
+  let timerId = 0;
+  return {
+    __SA_BOT_ROOTS__: roots, document: {}, timers, messages,
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+    emit(type, value = {}) { for (const fn of [...(listeners.get(type) || [])]) fn(value); },
+    count(type) { return listeners.get(type)?.size || 0; },
+    setInterval(fn) { timers.set(++timerId, fn); return timerId; },
+    clearInterval(id) { timers.delete(id); },
+    tick() { for (const fn of [...timers.values()]) fn(); },
+    postMessage(message) { messages.push(message); },
+    command(payload, overrides = {}) {
+      this.emit("message", { source: this, data: {
+        channel: "sa-ckda-v1", direction: "command", payload: { requestId: 1, ...payload }
+      }, ...overrides });
+    },
+    snapshot() { return messages.filter(value => value.direction === "snapshot").at(-1)?.payload; }
+  };
+}
+
+function installerRoots() {
+  const roots = liveRoots();
+  roots.user.isPremium = false;
+  roots.user.updatePremium = function () {};
+  Object.setPrototypeOf(roots.world, {
+    addEmpNew(target) { return target; },
+    hiddenIsh(target) { return "instaShield tshield" + target.ID; }
+  });
+  return roots;
+}
+
+test("MAIN installer waits for supported roots, installs once, and announces ready", () => {
+  assert.equal(typeof installCkda, "function");
+  const windowRef = installerWindow();
+  const installation = installCkda(windowRef);
+  assert.equal(installCkda(windowRef), installation);
+  assert.equal(windowRef.timers.size, 1);
+  windowRef.__SA_BOT_ROOTS__ = installerRoots();
+  windowRef.tick();
+  assert.equal(windowRef.timers.size, 1);
+  assert.equal(windowRef.count("message"), 1);
+  assert.equal(windowRef.snapshot().mapId, 17);
+  assert.equal(windowRef.messages.some(value => value.direction === "result" && value.payload.type === "ready"), true);
+  installation.cleanup();
+});
+
+test("MAIN commands reject foreign sources, wrong channels, and malformed command fields", () => {
+  assert.equal(typeof installCkda, "function");
+  const roots = installerRoots();
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  const before = windowRef.messages.length;
+  windowRef.command({ type: "set-premium", enabled: true }, { source: {} });
+  for (const payload of [
+    { type: "set-premium", enabled: "yes" },
+    { type: "set-premium", enabled: true, extra: true },
+    { type: "set-premium", enabled: true, requestId: -1 },
+    { type: "configure-effects", empCooldownMs: 0, ishCooldownMs: 28000 },
+    { type: "configure-effects", empCooldownMs: 28000, ishCooldownMs: Infinity },
+    { type: "refresh", extra: true }, { type: "attack", targetId: 8 }
+  ]) windowRef.command(payload);
+  windowRef.command({}, { data: { channel: "sa-bot-v1", direction: "command", payload: { requestId: 1, type: "set-premium", enabled: true } } });
+  windowRef.command({}, { data: { channel: "sa-ckda-v1", direction: "snapshot", payload: { requestId: 1, type: "set-premium", enabled: true } } });
+  assert.equal(roots.user.isPremium, false);
+  assert.equal(windowRef.messages.length, before);
+  installation.cleanup();
+});
+
+test("MAIN commands update Premium state, configure effects, clear cooldowns, and publish immediately", () => {
+  assert.equal(typeof installCkda, "function");
+  const roots = installerRoots();
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.equal(roots.user.isPremium, true);
+  assert.equal(windowRef.snapshot().premiumState, "active");
+  windowRef.command({ type: "configure-effects", empCooldownMs: 1000, ishCooldownMs: 120000 });
+  const before = Date.now();
+  roots.world.addEmpNew({ ID: 8 });
+  roots.world.hiddenIsh({ ID: 8 });
+  const count = windowRef.messages.length;
+  windowRef.command({ type: "refresh" });
+  assert.ok(windowRef.messages.length > count);
+  const player = windowRef.snapshot().players.find(value => value.id === 8);
+  assert.ok(player.empEndsAt >= before + 1000 && player.empEndsAt <= Date.now() + 1000);
+  assert.ok(player.ishEndsAt >= before + 120000 && player.ishEndsAt <= Date.now() + 120000);
+  windowRef.command({ type: "clear" });
+  assert.equal(windowRef.snapshot().players.find(value => value.id === 8).empEndsAt, null);
+  assert.equal(windowRef.snapshot().players.find(value => value.id === 8).ishEndsAt, null);
+  windowRef.command({ type: "set-premium", enabled: false });
+  assert.equal(roots.user.isPremium, false);
+  assert.equal(windowRef.snapshot().premiumState, "inactive");
+  installation.cleanup();
+});
+
+test("MAIN pagehide restores hooks and Premium, stops publisher, and removes command listener once", () => {
+  assert.equal(typeof installCkda, "function");
+  const roots = installerRoots();
+  const emp = roots.world.addEmpNew;
+  const descriptor = Object.getOwnPropertyDescriptor(roots.user, "isPremium");
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.notEqual(roots.world.addEmpNew, emp);
+  windowRef.emit("pagehide");
+  assert.equal(roots.world.addEmpNew, emp);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(roots.user, "isPremium"), descriptor);
+  assert.equal(windowRef.count("message"), 0);
+  assert.equal(windowRef.timers.size, 0);
+  assert.equal(installation.cleanup(), false);
+  const count = windowRef.messages.length;
+  windowRef.tick();
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.equal(windowRef.messages.length, count);
+});
+
+test("MAIN pagehide cancels roots polling and unknown clients never install mutations", () => {
+  assert.equal(typeof installCkda, "function");
+  const roots = installerRoots();
+  roots.version = "1.9.0.052";
+  const emp = roots.world.addEmpNew;
+  const windowRef = installerWindow(roots);
+  installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.equal(roots.world.addEmpNew, emp);
+  assert.equal(roots.user.isPremium, false);
+  assert.equal(windowRef.snapshot(), undefined);
+  windowRef.emit("pagehide");
+  assert.equal(windowRef.timers.size, 0);
+  windowRef.__SA_BOT_ROOTS__ = installerRoots();
+  windowRef.tick();
+  assert.equal(windowRef.snapshot(), undefined);
+});
+
+test("MAIN refresh follows live user/world replacement and clears disconnected cooldowns", () => {
+  assert.equal(typeof installCkda, "function");
+  const roots = installerRoots();
+  const firstWorld = roots.world;
+  const firstEmp = firstWorld.addEmpNew;
+  const firstUser = roots.user;
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  firstWorld.addEmpNew({ ID: 8 });
+  roots.network.connected = false;
+  windowRef.tick();
+  roots.network.connected = true;
+  windowRef.tick();
+  assert.equal(windowRef.snapshot().players.find(value => value.id === 8).empEndsAt, null);
+  const replacement = installerRoots();
+  roots.world = replacement.world;
+  roots.user = replacement.user;
+  windowRef.tick();
+  assert.equal(firstUser.isPremium, false);
+  assert.equal(roots.user.isPremium, true);
+  assert.equal(firstWorld.addEmpNew, firstEmp);
+  roots.world.addEmpNew({ ID: 8 });
+  windowRef.tick();
+  assert.ok(windowRef.snapshot().players.find(value => value.id === 8).empEndsAt > Date.now());
+  installation.cleanup();
+});
+
+test("effect configuration preserves active cooldown endpoints until an explicit clear", () => {
+  const roots = installerRoots();
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  roots.world.addEmpNew({ ID: 8 });
+  windowRef.command({ type: "refresh" });
+  const endpoint = windowRef.snapshot().players.find(value => value.id === 8).empEndsAt;
+  windowRef.command({ type: "configure-effects", empCooldownMs: 1000, ishCooldownMs: 1000 });
+  assert.equal(windowRef.snapshot().players.find(value => value.id === 8).empEndsAt, endpoint);
+  installation.cleanup();
+});
+
+test("manifest MAIN scripts auto-install once even when the entry point is evaluated twice", () => {
+  const windowRef = installerWindow(installerRoots());
+  const context = vm.createContext({ window: windowRef, TextEncoder });
+  for (const name of ["namespace-main.js", "ckda-schema.js", "ckda-core.js", "ckda-main.js", "ckda-main.js"]) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", name), "utf8"), context);
+  }
+  assert.equal(windowRef.count("message"), 1);
+  assert.equal(windowRef.timers.size, 1);
+  assert.equal(windowRef.snapshot().mapId, 17);
+  // Build message data in the page realm, as browser-delivered events do.
+  vm.runInContext('window.emit("message", { source: window, data: { channel: "sa-ckda-v1", direction: "command", payload: { requestId: 1, type: "set-premium", enabled: true } } })', context);
+  assert.equal(windowRef.__SA_BOT_ROOTS__.user.isPremium, true);
+  windowRef.emit("pagehide");
+  assert.equal(windowRef.__SA_BOT_ROOTS__.user.isPremium, false);
+  assert.equal(windowRef.timers.size, 0);
 });

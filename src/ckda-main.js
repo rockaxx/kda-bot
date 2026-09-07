@@ -8,12 +8,16 @@
       : root.__SA_BOT_MAIN_V1__;
   const api = factory(dependency);
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root) Object.assign(root.__SA_BOT_MAIN_V1__, api);
+  if (root) {
+    Object.assign(root.__SA_BOT_MAIN_V1__, api);
+    api.installCkda(root);
+  }
 })(typeof window === "object" ? window : null, function createApi(dependency) {
   "use strict";
 
   const CLIENT_VERSION = "1.9.0.051";
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
+  const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
 
   function normalizedClientVersion(value) {
     return String(value || "").replace(/^n/, "");
@@ -389,8 +393,9 @@
       typeof options.cooldowns.clearAll === "function"
         ? options.cooldowns
         : dependency.createCooldownRegistry(now);
-    const premiumState =
-      typeof options.premiumState === "string" ? options.premiumState : "inactive";
+    const premiumState = () => typeof options.premiumState === "function"
+      ? options.premiumState() : typeof options.premiumState === "string"
+        ? options.premiumState : "inactive";
     let stopped = false;
     let timer = null;
     let lastWorld = roots && roots.world;
@@ -398,26 +403,32 @@
 
     function refresh() {
       if (stopped) return null;
-      const world = roots && roots.world;
-      const mapId = Number(world && world.mapId);
-      if (world !== lastWorld || !Object.is(mapId, lastMapId)) {
+      try {
+        if (typeof options.beforeSnapshot === "function") options.beforeSnapshot();
+        const world = roots && roots.world;
+        const mapId = Number(world && world.mapId);
+        if (world !== lastWorld || !Object.is(mapId, lastMapId) || roots?.network?.connected !== true) {
+          cooldowns.clearAll();
+          lastWorld = world;
+          lastMapId = mapId;
+        }
+        const snapshot = createCkdaSnapshot(roots, cooldowns, premiumState(), now());
+        if (!snapshot || !windowRef || typeof windowRef.postMessage !== "function") {
+          return null;
+        }
+        windowRef.postMessage(
+          {
+            channel: dependency.CKDA_CHANNEL,
+            direction: "snapshot",
+            payload: snapshot
+          },
+          "*"
+        );
+        return snapshot;
+      } catch (_) {
         cooldowns.clearAll();
-        lastWorld = world;
-        lastMapId = mapId;
-      }
-      const snapshot = createCkdaSnapshot(roots, cooldowns, premiumState, now());
-      if (!snapshot || !windowRef || typeof windowRef.postMessage !== "function") {
         return null;
       }
-      windowRef.postMessage(
-        {
-          channel: dependency.CKDA_CHANNEL,
-          direction: "snapshot",
-          payload: snapshot
-        },
-        "*"
-      );
-      return snapshot;
     }
 
     refresh();
@@ -441,11 +452,138 @@
     return { stop, refresh };
   }
 
+  function validatedCommand(event, windowRef) {
+    try {
+      if (!event || event.source !== windowRef) return null;
+      if (new TextEncoder().encode(JSON.stringify(event.data)).byteLength > 4096) return null;
+      const envelope = dependency.validateCkdaEnvelope(event.data, "command");
+      if (!envelope.ok) return null;
+      const value = envelope.value.payload;
+      if (!Number.isSafeInteger(value.requestId) || value.requestId < 1) return null;
+      const fields = {
+        "set-premium": ["enabled"],
+        "configure-effects": ["empCooldownMs", "ishCooldownMs"],
+        clear: [], refresh: []
+      };
+      if (!Object.prototype.hasOwnProperty.call(fields, value.type)) return null;
+      const allowed = ["requestId", "type", ...fields[value.type]];
+      if (Object.keys(value).length !== allowed.length || Object.keys(value).some(key => !allowed.includes(key))) return null;
+      if (value.type === "set-premium" && typeof value.enabled !== "boolean") return null;
+      if (value.type === "configure-effects" && fields[value.type].some(key =>
+        !Number.isFinite(value[key]) || value[key] < 1000 || value[key] > 120000
+      )) return null;
+      return value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function installCkda(windowRef) {
+    if (!windowRef || typeof windowRef.addEventListener !== "function") return null;
+    if (windowRef[INSTALLATION_MARK]) return windowRef[INSTALLATION_MARK];
+    let stopped = false;
+    let pollTimer = null;
+    let publisher = null;
+    let cooldowns = null;
+    let premium = null;
+    let hooks = null;
+    let hookedWorld = null;
+    let roots = null;
+    let effects = { empCooldownMs: 28000, ishCooldownMs: 28000 };
+
+    function result(payload) {
+      windowRef.postMessage({ channel: dependency.CKDA_CHANNEL, direction: "result", payload }, "*");
+    }
+
+    function updateHooks(force = false) {
+      const world = roots.world;
+      if (world === hookedWorld && !force) return;
+      hooks?.cleanup();
+      if (world !== hookedWorld) cooldowns.clearAll();
+      hookedWorld = world;
+      hooks = installEffectHooks(world, cooldowns, effects);
+    }
+
+    function handleMessage(event) {
+      if (stopped) return;
+      const command = validatedCommand(event, windowRef);
+      if (!command) return;
+      if (!publisher) { tryInstall(); return; }
+      try {
+        if (command.type === "set-premium") {
+          if (command.enabled) premium.enable();
+          else premium.disable();
+        } else if (command.type === "configure-effects") {
+          effects = { empCooldownMs: command.empCooldownMs, ishCooldownMs: command.ishCooldownMs };
+          updateHooks(true);
+        } else if (command.type === "clear") {
+          cooldowns.clearAll();
+        }
+        publisher.refresh();
+      } catch (_) {
+        result({ requestId: command.requestId, type: command.type, state: "error" });
+      }
+    }
+
+    function cleanup() {
+      if (stopped) return false;
+      stopped = true;
+      if (pollTimer !== null) windowRef.clearInterval(pollTimer);
+      windowRef.removeEventListener("message", handleMessage);
+      windowRef.removeEventListener("pagehide", cleanup);
+      windowRef.removeEventListener("beforeunload", cleanup);
+      for (const release of [
+        () => publisher?.stop(), () => hooks?.cleanup(),
+        () => premium?.disable(), () => cooldowns?.clearAll()
+      ]) {
+        try { release(); } catch (_) { /* Release the remaining independent resources. */ }
+      }
+      return true;
+    }
+
+    function tryInstall() {
+      if (stopped || publisher) return;
+      try {
+        const candidate = windowRef.__SA_BOT_ROOTS__;
+        if (!candidate) return;
+        if (normalizedClientVersion(candidate.version) !== CLIENT_VERSION) {
+          result({ state: "unsupported-client" });
+          return;
+        }
+        roots = candidate;
+        cooldowns = dependency.createCooldownRegistry(Date.now);
+        premium = createPremiumOverride(roots, windowRef.document);
+        publisher = startCkdaPublisher(windowRef, roots, {
+          cooldowns,
+          premiumState: () => premium.state(),
+          beforeSnapshot() { updateHooks(); premium.refresh(); }
+        });
+        if (pollTimer !== null) windowRef.clearInterval(pollTimer);
+        pollTimer = null;
+        result({ type: "ready" });
+      } catch (_) {
+        hooks?.cleanup();
+        premium?.disable();
+        cooldowns?.clearAll();
+      }
+    }
+
+    const installation = { cleanup };
+    windowRef[INSTALLATION_MARK] = installation;
+    windowRef.addEventListener("message", handleMessage);
+    windowRef.addEventListener("pagehide", cleanup);
+    windowRef.addEventListener("beforeunload", cleanup);
+    tryInstall();
+    if (!publisher && !stopped) pollTimer = windowRef.setInterval(tryInstall, 100);
+    return installation;
+  }
+
   return {
     createPremiumOverride,
     createCkdaSnapshot,
     findUniquePrototypeMethod,
     installEffectHooks,
+    installCkda,
     startCkdaPublisher
   };
 });
