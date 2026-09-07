@@ -99,6 +99,71 @@ test("Premium override restores inherited effective boolean after deleting its t
   assert.deepEqual(calls, [true, false]);
 });
 
+test("Premium override reapplies absent descriptor after updater assigns isPremium", () => {
+  const calls = [];
+  const user = Object.create({ isPremium: false });
+  user.updatePremium = function updatePremium(value) {
+    calls.push(value);
+    this.isPremium = value;
+  };
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.enable(), true);
+  assert.equal(controller.disable(), true);
+  assert.equal(Object.getOwnPropertyDescriptor(user, "isPremium"), undefined);
+  assert.equal(user.isPremium, false);
+  assert.deepEqual(calls, [true, false]);
+});
+
+test("Premium override retains unsupported cleanup state when restore update throws", () => {
+  const calls = [];
+  let failRestore = true;
+  const user = {
+    isPremium: false,
+    updatePremium(value) {
+      calls.push(value);
+      if (!value && failRestore) {
+        failRestore = false;
+        throw new Error("restore failed");
+      }
+    }
+  };
+  const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.enable(), true);
+  assert.equal(controller.disable(), false);
+  assert.equal(controller.state(), "unsupported");
+  assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+  assert.equal(controller.disable(), true);
+  assert.equal(controller.state(), "inactive");
+  assert.deepEqual(calls, [true, false, false]);
+});
+
+test("Premium override refresh retains failed old-root cleanup for retry", () => {
+  let failRestore = true;
+  const first = {
+    isPremium: false,
+    updatePremium(value) {
+      if (!value && failRestore) {
+        failRestore = false;
+        throw new Error("restore failed");
+      }
+    }
+  };
+  const second = { isPremium: false, updatePremium() {} };
+  const roots = premiumRoots(first);
+  const controller = createPremiumOverride(roots, {});
+
+  assert.equal(controller.enable(), true);
+  roots.user = second;
+  assert.equal(controller.refresh(), false);
+  assert.equal(controller.state(), "unsupported");
+  assert.equal(controller.refresh(), true);
+  assert.equal(controller.state(), "active");
+  assert.equal(controller.disable(), true);
+});
+
 test("Premium override rejects non-configurable and throwing user transactions", () => {
   const fixed = {
     updatePremium() { throw new Error("must not call"); }

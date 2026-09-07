@@ -88,6 +88,7 @@
       }
 
       const record = {
+        cleanupFailed: false,
         descriptor,
         originalBoolean: typeof originalValue === "boolean" ? originalValue : null,
         updatePremium,
@@ -111,20 +112,29 @@
 
     function deactivate(record) {
       const propertyRestored = restoreProperty(record);
-      if (!propertyRestored) return false;
-      restorePremium(record);
-      return true;
+      if (!propertyRestored) {
+        record.cleanupFailed = true;
+        return false;
+      }
+      const premiumRestored = restorePremium(record);
+      const descriptorReapplied = restoreProperty(record);
+      record.cleanupFailed = !premiumRestored || !descriptorReapplied;
+      return !record.cleanupFailed;
     }
 
     function state() {
-      if (activeRecord) return requested ? "active" : "unsupported";
+      if (activeRecord) {
+        return !activeRecord.cleanupFailed && requested ? "active" : "unsupported";
+      }
       return requested ? "unsupported" : "inactive";
     }
 
     function enable() {
       requested = true;
       if (activeRecord) {
-        return activeRecord.user === currentUser() ? true : refresh();
+        return activeRecord.user === currentUser() && !activeRecord.cleanupFailed
+          ? true
+          : refresh();
       }
       activeRecord = install(currentUser());
       return Boolean(activeRecord);
@@ -141,7 +151,7 @@
 
     function refresh() {
       const user = currentUser();
-      if (activeRecord && activeRecord.user !== user) {
+      if (activeRecord && (activeRecord.user !== user || activeRecord.cleanupFailed)) {
         const record = activeRecord;
         if (!deactivate(record)) return false;
         activeRecord = null;
