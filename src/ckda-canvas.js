@@ -37,8 +37,11 @@
     const markerOpacity = clamp(opacity, 0.1, 1);
     context.save();
     context.globalAlpha = markerOpacity;
+    context.fillStyle = typeof color === "string" ? color : "#ffffff";
     context.strokeStyle = typeof color === "string" ? color : "#ffffff";
     context.lineWidth = Math.max(1, markerSize / 4);
+    context.shadowColor = typeof color === "string" ? color : "#ffffff";
+    context.shadowBlur = Math.max(4, markerSize / 2);
     context.beginPath();
 
     if (shape === "circle") {
@@ -67,6 +70,7 @@
       context.closePath();
     }
 
+    context.fill();
     context.stroke();
     context.restore();
     return true;
@@ -91,7 +95,7 @@
       position: "fixed",
       inset: "0",
       pointerEvents: "none",
-      zIndex: "2147483646"
+      zIndex: "2147483647"
     });
     documentRef.body.append(canvas);
     const context = canvas.getContext("2d");

@@ -16,6 +16,7 @@ function recordingContext() {
     rect(...args) { calls.push(["rect", ...args]); },
     moveTo(...args) { calls.push(["moveTo", ...args]); },
     lineTo(...args) { calls.push(["lineTo", ...args]); },
+    fill() { calls.push(["fill"]); },
     stroke() { calls.push(["stroke"]); },
     clearRect(...args) { calls.push(["clearRect", ...args]); },
     setTransform(...args) { calls.push(["setTransform", ...args]); },
@@ -37,6 +38,7 @@ for (const [shape, primitive, count] of [
     assert.equal(context.calls.filter(([name]) => name === primitive).length, count);
     assert.deepEqual(context.calls[0], ["save"]);
     assert.deepEqual(context.calls.at(-1), ["restore"]);
+    assert.equal(context.calls.some(([name]) => name === "fill"), true);
     assert.equal(context.globalAlpha, 0.5);
     assert.equal(context.strokeStyle, "#ff394f");
     assert.equal(context.lineWidth, 2.5);
@@ -249,7 +251,7 @@ test("canvas uses viewport DPI, ignores input, filters masked/stale data, and la
 
   assert.equal(dom.canvas.id, "sa-ckda-marker-layer");
   assert.equal(dom.canvas.style.pointerEvents, "none");
-  assert.equal(dom.canvas.style.zIndex, "2147483646");
+  assert.equal(dom.canvas.style.zIndex, "2147483647");
   assert.equal(dom.canvas.style.width, "640px");
   assert.equal(dom.canvas.style.height, "480px");
   assert.equal(dom.canvas.width, 1280);
