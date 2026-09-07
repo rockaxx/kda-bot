@@ -288,3 +288,39 @@ test("C-KDA save waits for storage completion and ignores completion after pageh
   assert.equal(await saved, false);
   assert.equal(app.calls.commands.length, commandCount);
 });
+
+for (const failure of ["save-failed", "error"]) {
+  test(`unsupported source gate survives ${failure} before a queued valid player snapshot`, async () => {
+    const app = setup({}, false, false, () => Promise.reject(new Error("storage unavailable")));
+    const playerSnapshot = { ...snapshot(), players: [{
+      id: 8, screenX: 100, screenY: 100, relation: "enemy", cloaked: true,
+      observedAt: 1000, empEndsAt: null, ishEndsAt: null
+    }] };
+    app.snapshot(playerSnapshot);
+    app.diagnostic({ patchStatus: "unsupported", clientVersion: null, reason: "root-fingerprint-mismatch" });
+    assert.equal(app.model().ckdaSnapshot, null);
+    assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+    const canvasCallsAfterUnsupported = app.calls.canvas.length;
+    if (failure === "save-failed") {
+      assert.equal(await app.options().onSaveCkda({ sizePx: 11 }), false);
+    } else {
+      app.result({ type: "set-premium", requestId: 1, state: "error" });
+    }
+    assert.equal(app.model().ckdaStatus.state, failure);
+    app.snapshot(playerSnapshot);
+    assert.equal(app.model().ckdaSnapshot, null);
+    assert.equal(app.calls.canvas.length, canvasCallsAfterUnsupported);
+    assert.equal(app.calls.starts + app.calls.stops, 0);
+  });
+}
+
+test("MAIN unsupported result clears observations and remains closed after an error result", () => {
+  const app = setup();
+  app.snapshot(snapshot());
+  app.result({ state: "unsupported-client" });
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+  app.result({ state: "error" });
+  app.snapshot(snapshot());
+  assert.equal(app.model().ckdaSnapshot, null);
+});

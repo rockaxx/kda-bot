@@ -60,6 +60,8 @@
     let runtime = null;
     let ckdaSettings = api.normalizeCkdaSettings(stored.ckdaSettings || {}).value;
     let ckdaSaving = false;
+    // Source compatibility is a page-lifetime gate, independent of transient UI failures.
+    let ckdaSourceUnsupported = false;
     let ckdaSnapshot = null;
     let ckdaStatus = { state: ckdaStartupFailed ? "error" : "waiting-for-game" };
     let ckdaCanvas = null;
@@ -114,6 +116,12 @@
       if (!["error", "save-failed", "unsupported-client"].includes(ckdaStatus.state)) {
         ckdaStatus = { state: "waiting-for-game" };
       }
+    }
+
+    function markCkdaUnsupported() {
+      ckdaSourceUnsupported = true;
+      clearCkda();
+      ckdaStatus = { state: "unsupported-client" };
     }
 
     function visibilityChanged() {
@@ -218,10 +226,7 @@
       diagnostic = value;
       if (value.patchStatus === "unsupported" ||
           (value.patchStatus === "patched" && !api.isSupportedDiagnostic(value))) {
-        ckdaAction(() => {
-          clearCkda();
-          ckdaStatus = { state: "unsupported-client" };
-        });
+        ckdaAction(markCkdaUnsupported);
       }
       logger.add("adapter", {
         patchStatus: value.patchStatus,
@@ -244,7 +249,7 @@
       render();
     };
     receiveCkdaSnapshot = (value) => ckdaAction(() => {
-      if (ckdaStatus.state === "unsupported-client") return;
+      if (ckdaSourceUnsupported) return;
       const checked = api.validateCkdaSnapshot(value);
       if (!checked.ok) return;
       ckdaSnapshot = checked.value;
@@ -255,7 +260,7 @@
     });
     receiveCkdaResult = (value) => ckdaAction(() => {
       if (value.type === "ready") configureCkda();
-      else if (value.state === "unsupported-client") ckdaStatus = { state: value.state };
+      else if (value.state === "unsupported-client") markCkdaUnsupported();
       else if (value.state === "error") ckdaStatus = { state: "error" };
     });
     if (pendingDiagnostic) receiveDiagnostic(pendingDiagnostic);
