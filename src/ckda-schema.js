@@ -8,6 +8,7 @@
   "use strict";
 
   const CKDA_CHANNEL = "sa-ckda-v1";
+  const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.051";
   const CONNECTION_STATES = new Set([
     "connected",
     "connecting",
@@ -81,10 +82,7 @@
     if (!isNonNegativeFinite(value.timestamp)) {
       errors.push("timestamp is invalid");
     }
-    if (
-      typeof value.clientVersion !== "string" ||
-      value.clientVersion.length === 0
-    ) {
+    if (value.clientVersion !== CKDA_SUPPORTED_CLIENT_VERSION) {
       errors.push("clientVersion is invalid");
     }
     if (!CONNECTION_STATES.has(value.connectionState)) {

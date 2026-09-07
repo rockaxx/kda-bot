@@ -39,6 +39,16 @@ test("accepts C-KDA snapshots and copies only declared keys", () => {
   assert.notEqual(result.value.players[0], input.players[0]);
 });
 
+test("rejects C-KDA snapshots from an unknown client version", () => {
+  const result = validateCkdaSnapshot({
+    ...validSnapshot,
+    clientVersion: "1.9.0.052"
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.errors, ["clientVersion is invalid"]);
+});
+
 test("accepts a matching C-KDA snapshot envelope", () => {
   const result = validateCkdaEnvelope({
     channel: CKDA_CHANNEL,
