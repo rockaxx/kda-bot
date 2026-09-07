@@ -109,6 +109,7 @@ function createDom() {
   const listeners = new Map();
   const rafs = new Map();
   let nextRaf = 1;
+  let epochNow = 1000;
   const windowRef = {
     innerWidth: 640,
     innerHeight: 480,
@@ -127,6 +128,8 @@ function createDom() {
       createElement(tag) { assert.equal(tag, "canvas"); return canvas; }
     },
     windowRef,
+    now: () => epochNow,
+    setNow(value) { epochNow = value; },
     context,
     canvas
   };
@@ -157,6 +160,7 @@ test("canvas uses viewport DPI, ignores input, filters masked/stale data, and la
 
   dom.context.calls.length = 0;
   canvas.render(validSnapshot(1000), validSettings({ displayMode: "masked-only" }));
+  dom.setNow(2000);
   dom.windowRef.runFrame(2000);
   assert.equal(dom.context.calls.some(([name]) => name === "arc"), false, "stale data must fail closed");
 
@@ -175,4 +179,20 @@ test("canvas clear and destroy cancel lifecycle resources and remove layer", () 
   assert.equal(dom.windowRef.rafCount(), 0);
   assert.equal(dom.windowRef.listenerCount(), 0);
   assert.equal(dom.canvas.removed, true);
+});
+
+test("canvas uses its epoch clock when RAF timestamp has a different origin", () => {
+  const dom = createDom();
+  const epochNow = 1_700_000_000_000;
+  const canvas = createCkdaCanvas({ ...dom, now: () => epochNow });
+
+  canvas.render(validSnapshot(epochNow), validSettings());
+  dom.windowRef.runFrame(42);
+
+  assert.equal(dom.context.calls.some(([name]) => name === "arc"), true);
+  assert.deepEqual(
+    dom.context.calls.find(([name]) => name === "fillText"),
+    ["fillText", "EMP 3", 110, 194]
+  );
+  canvas.destroy();
 });

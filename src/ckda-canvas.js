@@ -72,7 +72,7 @@
     return true;
   }
 
-  function createCkdaCanvas({ documentRef, windowRef }) {
+  function createCkdaCanvas({ documentRef, windowRef, now = Date.now }) {
     if (
       !documentRef ||
       !documentRef.body ||
@@ -151,9 +151,19 @@
       context.restore();
     }
 
-    function draw(now) {
+    function currentTime() {
+      try {
+        const value = now();
+        return Number.isFinite(value) && value >= 0 ? value : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function draw() {
       const viewportSize = resize();
       erase(viewportSize);
+      const timestamp = currentTime();
       if (
         !context ||
         !latestSnapshot ||
@@ -161,9 +171,9 @@
         latestSettings.overlayEnabled !== true ||
         latestSnapshot.connectionState !== "connected" ||
         latestSnapshot.premiumState === "unsupported" ||
-        !Number.isFinite(now) ||
-        latestSnapshot.timestamp > now ||
-        now - latestSnapshot.timestamp > STALE_AFTER_MS
+        timestamp === null ||
+        latestSnapshot.timestamp > timestamp ||
+        timestamp - latestSnapshot.timestamp > STALE_AFTER_MS
       ) {
         return;
       }
@@ -171,7 +181,7 @@
       const players = dependency.filterVisiblePlayers(
         latestSnapshot.players,
         latestSettings,
-        now,
+        timestamp,
         viewportSize,
         STALE_AFTER_MS
       );
@@ -187,15 +197,15 @@
           color,
           latestSettings.opacity
         );
-        drawCooldown(player, latestSettings, now);
+        drawCooldown(player, latestSettings, timestamp);
       }
     }
 
     function schedule() {
       if (destroyed || frameId !== null) return;
-      frameId = windowRef.requestAnimationFrame((now) => {
+      frameId = windowRef.requestAnimationFrame(() => {
         frameId = null;
-        draw(now);
+        draw();
         schedule();
       });
     }
