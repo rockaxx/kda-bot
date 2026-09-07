@@ -2,8 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   canStartBot,
+  createCkdaFormState,
   createSettingsFormState,
   createExportFile,
+  formatCkdaStatus,
   formatMapStatus,
   isSupportedDiagnostic,
   keepHostMounted,
@@ -28,14 +30,86 @@ test("plain N toggles panel but typing and modified shortcuts do not", () => {
 });
 
 test("panel state toggles visibility and selects only known tabs", () => {
-  const state = createPanelState(["dashboard", "settings"]);
-  assert.deepEqual(state.read(), { visible: true, activeTab: "dashboard" });
+  const state = createPanelState(["bot", "ckda", "settings"]);
+  assert.deepEqual(state.read(), { visible: true, activeTab: "bot" });
   state.toggle();
-  assert.deepEqual(state.read(), { visible: false, activeTab: "dashboard" });
+  assert.deepEqual(state.read(), { visible: false, activeTab: "bot" });
+  assert.equal(state.selectTab("ckda"), true);
+  assert.deepEqual(state.read(), { visible: false, activeTab: "ckda" });
   assert.equal(state.selectTab("settings"), true);
   assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
   assert.equal(state.selectTab("unknown"), false);
   assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
+});
+
+test("C-KDA drafts survive telemetry renders until successful save", () => {
+  const listeners = {};
+  const inputs = {};
+  for (const [key, type] of [
+    ["overlayEnabled", "checkbox"], ["displayMode", "select"], ["shape", "select"],
+    ["allyColor", "color"], ["enemyColor", "color"], ["sizePx", "number"],
+    ["opacity", "number"], ["showEmpCooldown", "checkbox"],
+    ["showIshCooldown", "checkbox"], ["empCooldownMs", "number"],
+    ["ishCooldownMs", "number"], ["premiumOverride", "checkbox"]
+  ]) {
+    inputs[key] = {
+      checked: false,
+      type,
+      value: "",
+      addEventListener(name, handler) { listeners[`${key}:${name}`] = handler; }
+    };
+  }
+  const form = createCkdaFormState(inputs);
+  const persisted = {
+    overlayEnabled: true,
+    displayMode: "masked-only",
+    shape: "circle",
+    allyColor: "#45d483",
+    enemyColor: "#ff394f",
+    sizePx: 8,
+    opacity: 0.9,
+    showEmpCooldown: true,
+    showIshCooldown: true,
+    empCooldownMs: 28000,
+    ishCooldownMs: 28000,
+    premiumOverride: false
+  };
+
+  form.sync(persisted);
+  inputs.allyColor.value = "#abcdef";
+  inputs.sizePx.value = "14";
+  inputs.shape.value = "star";
+  listeners["allyColor:input"]();
+  listeners["sizePx:input"]();
+  listeners["shape:change"]();
+
+  form.sync({ ...persisted, allyColor: "#ffffff", sizePx: 9, shape: "square" });
+  assert.equal(inputs.allyColor.value, "#abcdef");
+  assert.equal(inputs.sizePx.value, "14");
+  assert.equal(inputs.shape.value, "star");
+
+  let submitted;
+  form.submit((value) => {
+    submitted = value;
+    return true;
+  });
+  assert.deepEqual(
+    { allyColor: submitted.allyColor, sizePx: submitted.sizePx, shape: submitted.shape },
+    { allyColor: "#abcdef", sizePx: 14, shape: "star" }
+  );
+  form.sync({ ...persisted, allyColor: "#aabbcc", sizePx: 15, shape: "plus" });
+  assert.equal(inputs.allyColor.value, "#aabbcc");
+  assert.equal(inputs.sizePx.value, "15");
+  assert.equal(inputs.shape.value, "plus");
+});
+
+test("C-KDA status uses compact human-readable labels", () => {
+  assert.equal(formatCkdaStatus("ready"), "Ready");
+  assert.equal(formatCkdaStatus("waiting-for-game"), "Waiting for game");
+  assert.equal(formatCkdaStatus("unsupported-client"), "Unsupported client");
+  assert.equal(formatCkdaStatus("no-player-data"), "No player data");
+  assert.equal(formatCkdaStatus("premium-active"), "Premium override active");
+  assert.equal(formatCkdaStatus("premium-unsupported"), "Premium override unsupported");
 });
 
 test("settings draft survives live renders until successful save", () => {

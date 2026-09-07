@@ -15,6 +15,20 @@
     ["movementIntervalMs", "Move interval ms", "number"],
     ["targetBlacklistMs", "Blacklist ms", "number"]
   ]);
+  const CKDA_FIELD_DEFINITIONS = Object.freeze([
+    ["overlayEnabled", "Marker overlay", "checkbox"],
+    ["displayMode", "Display mode", "select"],
+    ["shape", "Marker shape", "select"],
+    ["allyColor", "Ally colour", "color"],
+    ["enemyColor", "Enemy colour", "color"],
+    ["sizePx", "Marker size", "number"],
+    ["opacity", "Opacity", "number"],
+    ["showEmpCooldown", "Show EMP", "checkbox"],
+    ["empCooldownMs", "EMP duration ms", "number"],
+    ["showIshCooldown", "Show ISH", "checkbox"],
+    ["ishCooldownMs", "ISH duration ms", "number"],
+    ["premiumOverride", "Premium override", "checkbox"]
+  ]);
   const EXPECTED_CLIENT_VERSION = "1.9.0.051";
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
@@ -25,15 +39,21 @@
     return snapshot ? String(snapshot.mapId) : "—";
   }
 
-  function createSettingsFormState(inputs) {
+  function createFormState(inputs, definitions) {
     const dirtyFields = new Set();
-    for (const [key] of FIELD_DEFINITIONS) {
-      inputs[key].addEventListener("input", () => dirtyFields.add(key));
+    for (const [key] of definitions) {
+      const markDirty = () => dirtyFields.add(key);
+      inputs[key].addEventListener("input", markDirty);
+      inputs[key].addEventListener("change", markDirty);
     }
 
-    function readSettings() {
+    function read() {
       const result = {};
-      for (const [key, , type] of FIELD_DEFINITIONS) {
+      for (const [key, , type] of definitions) {
+        if (type === "checkbox") {
+          result[key] = Boolean(inputs[key].checked);
+          continue;
+        }
         const raw = inputs[key].value.trim();
         result[key] = type === "number" ? Number(raw) : raw;
       }
@@ -42,18 +62,53 @@
 
     function sync(settings) {
       if (!settings) return;
-      for (const [key] of FIELD_DEFINITIONS) {
+      for (const [key, , type] of definitions) {
         if (dirtyFields.has(key)) continue;
-        inputs[key].value = settings[key] === null ? "" : String(settings[key]);
+        if (type === "checkbox") {
+          inputs[key].checked = Boolean(settings[key]);
+        } else {
+          inputs[key].value = settings[key] === null ? "" : String(settings[key]);
+        }
       }
     }
 
     function submit(onSave) {
-      const result = onSave(readSettings());
+      const result = onSave(read());
       if (result === true) dirtyFields.clear();
     }
 
-    return { readSettings, submit, sync };
+    return { read, submit, sync };
+  }
+
+  function createSettingsFormState(inputs) {
+    const form = createFormState(inputs, FIELD_DEFINITIONS);
+    return { ...form, readSettings: form.read };
+  }
+
+  function createCkdaFormState(inputs) {
+    const form = createFormState(inputs, CKDA_FIELD_DEFINITIONS);
+    return { ...form, readSettings: form.read };
+  }
+
+  function formatCkdaStatus(status, snapshot) {
+    const state = typeof status === "string" ? status : status && status.state;
+    const labels = {
+      ready: "Ready",
+      waiting: "Waiting for game",
+      "waiting-for-game": "Waiting for game",
+      "unsupported-client": "Unsupported client",
+      "no-player-data": "No player data",
+      "premium-active": "Premium override active",
+      "premium-unsupported": "Premium override unsupported"
+    };
+    if (labels[state]) return labels[state];
+    if (snapshot?.premiumState === "active") return "Premium override active";
+    if (snapshot?.premiumState === "unsupported") return "Premium override unsupported";
+    if (!snapshot || snapshot.connectionState !== "connected") return "Waiting for game";
+    if (!Array.isArray(snapshot.players) || snapshot.players.length === 0) {
+      return "No player data";
+    }
+    return "Ready";
   }
 
   function isSupportedDiagnostic(diagnostic) {
@@ -134,7 +189,15 @@
     };
   }
 
-  function createOverlay({ documentRef, onStart, onStop, onSave, onExport }) {
+  function createOverlay({
+    documentRef,
+    onStart,
+    onStop,
+    onSave,
+    onSaveCkda = () => false,
+    onCkdaCommand = () => {},
+    onExport
+  }) {
     const host = documentRef.createElement("div");
     host.id = "sa-bot-root";
     const shadow = host.attachShadow({ mode: "closed" });
@@ -168,7 +231,7 @@
         background: #7f6066; box-shadow: 0 0 0 3px rgba(127,96,102,.12); }
       .live-pill.on { color: #fda4af; border-color: rgba(244,63,94,.32); }
       .live-pill.on::before { background: #f43f5e; box-shadow: 0 0 10px #e11d48; }
-      .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 0 14px;
+      .tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin: 0 14px;
         padding: 4px; border: 1px solid rgba(148,163,184,.1); border-radius: 11px;
         background: rgba(12,3,7,.68); }
       .tab { padding: 8px; border: 0; border-radius: 8px; color: #9b7279;
@@ -202,10 +265,15 @@
       .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
       .field { display: flex; flex-direction: column; gap: 5px; }
       label { color: #a77b83; font-size: 10px; font-weight: 700; }
-      input { width: 100%; border: 1px solid rgba(159,73,88,.32); border-radius: 9px;
+      input, select { width: 100%; border: 1px solid rgba(159,73,88,.32); border-radius: 9px;
         outline: none; background: rgba(15,3,7,.82); color: #fff1f2; padding: 8px 9px;
         font: 700 12px/1.2 Inter,Segoe UI,Arial,sans-serif; transition: border-color .15s,box-shadow .15s; }
-      input:focus { border-color: #f43f5e; box-shadow: 0 0 0 3px rgba(244,63,94,.12); }
+      input:focus, select:focus { border-color: #f43f5e; box-shadow: 0 0 0 3px rgba(244,63,94,.12); }
+      input[type="checkbox"] { width: auto; min-width: 18px; min-height: 18px; accent-color: #e11d48; }
+      input[type="color"] { min-height: 35px; padding: 3px; cursor: pointer; }
+      .toggle-field { flex-direction: row; align-items: center; justify-content: space-between;
+        padding: 8px 9px; border: 1px solid rgba(159,73,88,.2); border-radius: 9px;
+        background: rgba(15,3,7,.44); }
       .wide { grid-column: 1/-1; }
       .secondary { width: 100%; min-height: 36px; border: 1px solid rgba(244,63,94,.22);
         border-radius: 10px; color: #fda4af; background: rgba(76,5,25,.34);
@@ -240,11 +308,11 @@
     header.append(logo, heading, livePill);
     panel.appendChild(header);
 
-    const tabState = createPanelState(["dashboard", "settings"]);
+    const tabState = createPanelState(["bot", "ckda", "settings"]);
     const tabs = documentRef.createElement("nav");
     tabs.className = "tabs";
     const tabButtons = {};
-    for (const [name, text] of [["dashboard", "Dashboard"], ["settings", "Settings"]]) {
+    for (const [name, text] of [["bot", "BOT"], ["ckda", "C-KDA"], ["settings", "Settings"]]) {
       const button = documentRef.createElement("button");
       button.className = "tab";
       button.textContent = text;
@@ -271,6 +339,37 @@
     }
     const settingsForm = createSettingsFormState(inputs);
 
+    const ckdaFields = documentRef.createElement("div");
+    ckdaFields.className = "settings-grid";
+    const ckdaInputs = {};
+    for (const [key, labelText, type] of CKDA_FIELD_DEFINITIONS) {
+      const field = documentRef.createElement("div");
+      field.className = type === "checkbox" ? "field toggle-field" : "field";
+      const label = documentRef.createElement("label");
+      label.textContent = labelText;
+      const input = type === "select"
+        ? documentRef.createElement("select")
+        : documentRef.createElement("input");
+      if (type === "select") {
+        const options = key === "displayMode"
+          ? [["masked-only", "Masked only"], ["all", "All players"]]
+          : [["circle", "Circle"], ["square", "Square"], ["triangle", "Triangle"], ["plus", "Plus"], ["star", "Star"]];
+        for (const [value, text] of options) {
+          const option = documentRef.createElement("option");
+          option.value = value;
+          option.textContent = text;
+          input.appendChild(option);
+        }
+      } else {
+        input.type = type;
+      }
+      input.dataset.ckdaSetting = key;
+      ckdaInputs[key] = input;
+      field.append(label, input);
+      ckdaFields.appendChild(field);
+    }
+    const ckdaForm = createCkdaFormState(ckdaInputs);
+
     const makeButton = (text, className, parent) => {
       const button = documentRef.createElement("button");
       button.textContent = text;
@@ -281,7 +380,7 @@
 
     const dashboard = documentRef.createElement("div");
     dashboard.className = "view";
-    dashboard.dataset.view = "dashboard";
+    dashboard.dataset.view = "bot";
     const modeCard = documentRef.createElement("div");
     modeCard.className = "mode-card";
     const modeIcon = documentRef.createElement("div");
@@ -339,7 +438,44 @@
     const errors = documentRef.createElement("div");
     errors.className = "errors";
     settingsView.appendChild(errors);
-    panel.append(dashboard, settingsView);
+
+    const ckdaView = documentRef.createElement("div");
+    ckdaView.className = "view";
+    ckdaView.dataset.view = "ckda";
+    const ckdaTitle = documentRef.createElement("div");
+    ckdaTitle.className = "section-title";
+    ckdaTitle.textContent = "Player marker controls";
+    ckdaView.append(ckdaTitle, ckdaFields);
+    const ckdaControls = documentRef.createElement("div");
+    ckdaControls.className = "controls";
+    const saveCkdaButton = makeButton("SAVE C-KDA", "action", ckdaControls);
+    const clearCkdaButton = makeButton("CLEAR MARKERS", "secondary", ckdaControls);
+    ckdaView.appendChild(ckdaControls);
+    const ckdaStatusTitle = documentRef.createElement("div");
+    ckdaStatusTitle.className = "section-title";
+    ckdaStatusTitle.textContent = "C-KDA status";
+    ckdaView.appendChild(ckdaStatusTitle);
+    const ckdaStatusGrid = documentRef.createElement("div");
+    ckdaStatusGrid.className = "status-grid";
+    const ckdaStatusValues = {};
+    for (const [key, label] of [
+      ["support", "Adapter"], ["tracked", "Tracked"], ["state", "Status"]
+    ]) {
+      const metric = documentRef.createElement("div");
+      metric.className = "metric";
+      if (key === "state") metric.classList.add("wide");
+      const name = documentRef.createElement("span");
+      name.className = "key";
+      name.textContent = label;
+      const value = documentRef.createElement("span");
+      value.className = "value";
+      value.textContent = "—";
+      ckdaStatusValues[key] = value;
+      metric.append(name, value);
+      ckdaStatusGrid.appendChild(metric);
+    }
+    ckdaView.appendChild(ckdaStatusGrid);
+    panel.append(dashboard, ckdaView, settingsView);
 
     const footer = documentRef.createElement("footer");
     footer.className = "footer";
@@ -362,7 +498,8 @@
       for (const name of Object.keys(tabButtons)) {
         tabButtons[name].classList.toggle("active", current.activeTab === name);
       }
-      dashboard.hidden = current.activeTab !== "dashboard";
+      dashboard.hidden = current.activeTab !== "bot";
+      ckdaView.hidden = current.activeTab !== "ckda";
       settingsView.hidden = current.activeTab !== "settings";
     }
 
@@ -388,11 +525,14 @@
     });
     stopButton.addEventListener("click", () => onStop());
     saveButton.addEventListener("click", () => settingsForm.submit(onSave));
+    saveCkdaButton.addEventListener("click", () => ckdaForm.submit(onSaveCkda));
+    clearCkdaButton.addEventListener("click", () => onCkdaCommand("clear"));
     exportButton.addEventListener("click", () => onExport());
 
     function render(model) {
       lastModel = { ...model };
       settingsForm.sync(model.settings);
+      ckdaForm.sync(model.ckdaSettings);
       startButton.disabled = !canStartBot(model) || Boolean(model.active);
       stopButton.disabled = !model.active;
       exportButton.disabled = !model.diagnostic && !model.clientSource;
@@ -411,6 +551,12 @@
       statusValues.target.textContent = snapshot?.target ? `${snapshot.target.type}:${snapshot.target.id}` : "none";
       statusValues.nearby.textContent = snapshot ? String(snapshot.entities.filter((e) => e.type === "npc" && e.alive).length) : "—";
       statusValues.safety.textContent = model.active ? "NPC only" : "Stopped";
+      const ckdaSnapshot = model.ckdaSnapshot;
+      ckdaStatusValues.support.textContent = ckdaSnapshot ? "Ready" : "Waiting";
+      ckdaStatusValues.tracked.textContent = Array.isArray(ckdaSnapshot?.players)
+        ? String(ckdaSnapshot.players.length)
+        : "—";
+      ckdaStatusValues.state.textContent = formatCkdaStatus(model.ckdaStatus, ckdaSnapshot);
     }
 
     function destroy() {
@@ -419,15 +565,22 @@
       host.remove();
     }
 
-    return { destroy, readSettings: settingsForm.readSettings, render };
+    return {
+      destroy,
+      readCkdaSettings: ckdaForm.readSettings,
+      readSettings: settingsForm.readSettings,
+      render
+    };
   }
 
   return {
     canStartBot,
     createExportFile,
     createOverlay,
+    createCkdaFormState,
     createPanelState,
     createSettingsFormState,
+    formatCkdaStatus,
     formatMapStatus,
     isSupportedDiagnostic,
     keepHostMounted,
