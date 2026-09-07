@@ -161,6 +161,13 @@ test("normalizes current live roots into an NPC-only snapshot", () => {
   });
 });
 
+test("snapshot remains NPC-only when live roots also contain players", () => {
+  const snapshot = createSnapshot(liveRoots(), 1234);
+
+  assert.deepEqual(snapshot.entities.map((entity) => entity.type), ["npc"]);
+  assert.equal(snapshot.entities.some((entity) => entity.id === 300), false);
+});
+
 test("rejects incomplete roots instead of publishing guessed state", () => {
   assert.equal(createSnapshot({}, 1234), null);
   assert.equal(
