@@ -35,7 +35,7 @@ test("invalid C-KDA values fall back field by field", () => {
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, [
     "shape is invalid",
-    "sizePx must be from 3 to 30",
+    "sizePx must be from 3 to 200",
     "premiumOverride must be a boolean"
   ]);
 });
@@ -47,7 +47,7 @@ test("normalizes every documented valid setting and drops unknown keys", () => {
     shape: "star",
     allyColor: "#ABCDEF",
     enemyColor: "#123456",
-    sizePx: 30,
+    sizePx: 200,
     opacity: 0.1,
     showEmpCooldown: false,
     showIshCooldown: false,
@@ -62,7 +62,7 @@ test("normalizes every documented valid setting and drops unknown keys", () => {
   assert.equal(result.value.displayMode, "all");
   assert.equal(result.value.shape, "star");
   assert.equal(result.value.allyColor, "#ABCDEF");
-  assert.equal(result.value.sizePx, 30);
+  assert.equal(result.value.sizePx, 200);
   assert.equal(result.value.opacity, 0.1);
   assert.equal(result.value.premiumOverride, true);
   assert.equal(Object.hasOwn(result.value, "ignored"), false);
@@ -90,7 +90,7 @@ test("rejects truthy booleans and invalid numeric, colour, and enum values", () 
     "displayMode is invalid",
     "allyColor is invalid",
     "enemyColor is invalid",
-    "sizePx must be from 3 to 30",
+    "sizePx must be from 3 to 200",
     "opacity must be from 0.1 to 1",
     "showEmpCooldown must be a boolean",
     "showIshCooldown must be a boolean",

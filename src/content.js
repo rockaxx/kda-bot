@@ -215,7 +215,10 @@
       async onSaveCkda(rawSettings) {
         if (unloaded || ckdaSaving) return false;
         const candidate = api.normalizeCkdaSettings(rawSettings);
-        if (!candidate.ok) return false;
+        if (!candidate.ok) {
+          ckdaAction(() => { ckdaStatus = { state: "save-failed" }; });
+          return false;
+        }
         ckdaSaving = true;
         try {
           await chrome.storage.local.set({ ckdaSettings: { ...candidate.value } });

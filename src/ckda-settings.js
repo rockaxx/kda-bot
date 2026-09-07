@@ -30,7 +30,7 @@
     "premiumOverride"
   ]);
   const RANGES = Object.freeze({
-    sizePx: [3, 30],
+    sizePx: [3, 200],
     opacity: [0.1, 1],
     empCooldownMs: [1000, 120000],
     ishCooldownMs: [1000, 120000]

@@ -33,7 +33,7 @@
       return false;
     }
 
-    const markerSize = clamp(size, 3, 30);
+    const markerSize = clamp(size, 3, 200);
     const markerOpacity = clamp(opacity, 0.1, 1);
     context.save();
     context.globalAlpha = markerOpacity;

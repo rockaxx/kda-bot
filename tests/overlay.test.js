@@ -259,7 +259,7 @@ test("C-KDA controls bind every label and expose schema-aligned numeric bounds",
         ])
       ),
       {
-        sizePx: { min: "3", max: "30", step: "1" },
+        sizePx: { min: "3", max: "200", step: "1" },
         opacity: { min: "0.1", max: "1", step: "0.1" },
         empCooldownMs: { min: "1000", max: "120000", step: "1000" },
         ishCooldownMs: { min: "1000", max: "120000", step: "1000" }

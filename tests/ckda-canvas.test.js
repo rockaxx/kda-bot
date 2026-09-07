@@ -62,6 +62,15 @@ for (const [shape, primitive, count] of [
   });
 }
 
+test("drawMarker preserves a configured 90 px marker size", () => {
+  const context = recordingContext();
+  drawMarker(context, "circle", 200, 300, 90, "#ff394f", 0.9);
+  assert.deepEqual(
+    context.calls.find(([name]) => name === "arc").slice(1, 4),
+    [200, 300, 90]
+  );
+});
+
 function validSnapshot(now = 1000) {
   return {
     timestamp: now,

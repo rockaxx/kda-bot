@@ -255,6 +255,7 @@ test("C-KDA saves normalized settings and updates canvas and Premium independent
   assert.equal(await app.options().onSaveCkda({ sizePx: -1 }), false);
   assert.equal(app.calls.saves.length, 1);
   assert.equal(app.model().ckdaSettings.sizePx, 11);
+  assert.equal(app.model().ckdaStatus.state, "save-failed");
   assert.equal(app.calls.destroyed.length, 0);
   assert.equal(app.calls.stops, 0);
 });
