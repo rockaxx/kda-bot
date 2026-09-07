@@ -4,7 +4,7 @@ const { createCkdaBridge } = require("../src/ckda-bridge.js");
 
 const validSnapshot = {
   timestamp: 1000,
-  clientVersion: "1.9.0.051",
+  clientVersion: "1.9.0.052",
   connectionState: "connected",
   mapId: 17,
   premiumState: "inactive",

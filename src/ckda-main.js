@@ -15,7 +15,7 @@
 })(typeof window === "object" ? window : null, function createApi(dependency) {
   "use strict";
 
-  const CLIENT_VERSION = "1.9.0.051";
+  const CLIENT_VERSION = "1.9.0.052";
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
   const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
   const LEASE_DURATION_MS = 120000;

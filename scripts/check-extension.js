@@ -118,7 +118,7 @@ const maintainedSource = fs.readdirSync(sourceDir)
   .filter((name) => name.endsWith(".js"))
   .map((name) => fs.readFileSync(path.join(sourceDir, name), "utf8"))
   .join("\n");
-if (!/CKDA_SUPPORTED_CLIENT_VERSION\s*=\s*["']1\.9\.0\.051["']/.test(maintainedSource)) {
+if (!/CKDA_SUPPORTED_CLIENT_VERSION\s*=\s*["']1\.9\.0\.052["']/.test(maintainedSource)) {
   errors.push("missing supported C-KDA client version marker");
 }
 if (

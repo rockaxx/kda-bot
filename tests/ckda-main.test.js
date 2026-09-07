@@ -13,7 +13,7 @@ const {
   installCkda
 } = require("../src/ckda-main.js");
 
-function premiumRoots(user, version = "n1.9.0.051") {
+function premiumRoots(user, version = "n1.9.0.052") {
   return { version, user };
 }
 
@@ -317,7 +317,7 @@ test("Premium override refresh restores replaced user root and supports repeated
 test("Premium override refuses incompatible roots without mutation", () => {
   const user = { isPremium: false, updatePremium() {} };
   const original = Object.getOwnPropertyDescriptor(user, "isPremium");
-  const controller = createPremiumOverride(premiumRoots(user, "1.9.0.052"), {});
+  const controller = createPremiumOverride(premiumRoots(user, "1.9.0.053"), {});
 
   assert.equal(controller.enable(), false);
   assert.equal(controller.state(), "unsupported");
@@ -495,7 +495,7 @@ function liveRoots(overrides = {}) {
   const ally = mapShip(9, { clanId: 10 });
   const malformed = mapShip(undefined);
   return {
-    version: "n1.9.0.051",
+    version: "n1.9.0.052",
     network: { connected: true },
     user: { userID: 77, clanId: 10, ship: localShip },
     world: {
@@ -530,7 +530,7 @@ test("publishes only projected remote players in a sanitized C-KDA snapshot", ()
 
   assert.deepEqual(snapshot, {
     timestamp: 1234,
-    clientVersion: "1.9.0.051",
+    clientVersion: "1.9.0.052",
     connectionState: "connected",
     mapId: 17,
     premiumState: "active",
@@ -563,7 +563,7 @@ test("fails closed for unsupported client, disconnected network, and invalid roo
   const cooldowns = { read() { return { empEndsAt: null, ishEndsAt: null }; } };
 
   assert.equal(
-    createCkdaSnapshot(liveRoots({ version: "1.9.0.052" }), cooldowns, "inactive", 1),
+    createCkdaSnapshot(liveRoots({ version: "1.9.0.053" }), cooldowns, "inactive", 1),
     null
   );
   assert.equal(
@@ -879,7 +879,7 @@ test("MAIN pagehide restores hooks and Premium, stops publisher, and removes com
 test("MAIN pagehide cancels roots polling and unknown clients never install mutations", () => {
   assert.equal(typeof installCkda, "function");
   const roots = installerRoots();
-  roots.version = "1.9.0.052";
+  roots.version = "1.9.0.053";
   const emp = roots.world.addEmpNew;
   const windowRef = installerWindow(roots);
   installCkda(windowRef);
@@ -991,7 +991,7 @@ for (const reason of ["world", "map", "disconnect", "unsupported", "clear"]) {
     if (reason === "world") roots.world = { ...roots.world };
     else if (reason === "map") roots.world.mapId = 18;
     else if (reason === "disconnect") roots.network.connected = false;
-    else if (reason === "unsupported") roots.version = "1.9.0.052";
+    else if (reason === "unsupported") roots.version = "1.9.0.053";
     else {
       assert.equal(typeof publisher.clear, "function");
       publisher.clear();
@@ -999,7 +999,7 @@ for (const reason of ["world", "map", "disconnect", "unsupported", "clear"]) {
     publisher.refresh();
     assert.equal(windowRef.messages.some(message => message.payload.connectionState === "disconnected"), true);
     roots.network.connected = true;
-    roots.version = "n1.9.0.051";
+    roots.version = "n1.9.0.052";
     if (reason === "disconnect" || reason === "unsupported") publisher.refresh();
     assert.equal(windowRef.snapshot().players[0].id, firstId);
     publisher.stop();

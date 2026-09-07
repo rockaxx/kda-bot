@@ -63,7 +63,7 @@ for (const [shape, primitive, count] of [
 function validSnapshot(now = 1000) {
   return {
     timestamp: now,
-    clientVersion: "1.9.0.051",
+    clientVersion: "1.9.0.052",
     connectionState: "connected",
     mapId: 17,
     premiumState: "inactive",
@@ -181,10 +181,10 @@ for (const reason of ["map", "disconnect", "unsupported", "clear", "destroy"]) {
     const empty = { ...validSnapshot(), players: [] };
     if (reason === "map") empty.mapId = 18;
     else if (reason === "disconnect") empty.connectionState = "disconnected";
-    else if (reason === "unsupported") empty.clientVersion = "1.9.0.052";
+    else if (reason === "unsupported") empty.clientVersion = "1.9.0.053";
     else canvas[reason]();
     canvas.render(empty, validSettings());
-    canvas.render({ ...empty, clientVersion: "1.9.0.051", connectionState: "connected" }, validSettings());
+    canvas.render({ ...empty, clientVersion: "1.9.0.052", connectionState: "connected" }, validSettings());
     dom.windowRef.runFrame(0);
     assert.equal(dom.context.calls.some(([name]) => name === "arc"), false);
     canvas.destroy();
@@ -204,7 +204,7 @@ test("32-player rotation delivers and renders the final cloaked player within tw
       for (const listener of messageListeners) listener({ source: windowRef, data: structuredClone(message) });
     }
   };
-  const roots = { version: "1.9.0.051", network: { connected: true },
+  const roots = { version: "1.9.0.052", network: { connected: true },
     user: { userID: 99, ship: { ID: 99 } },
     world: { mapId: 17, MAP_SHIPS: new Map(Array.from({ length: 32 }, (_, id) => [id, {
       ID: `player-${id}-é`, isNpc: false, isCloaked: id === 31,

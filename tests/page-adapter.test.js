@@ -98,7 +98,7 @@ function liveRoots(overrides = {}) {
     destroyed: false
   };
   return {
-    version: "n1.9.0.051",
+    version: "n1.9.0.052",
     network: { connected: true },
     ui: {
       ACTION_BAR: {
@@ -135,7 +135,7 @@ test("normalizes current live roots into an NPC-only snapshot", () => {
 
   assert.deepEqual(snapshot, {
     timestamp: 1234,
-    clientVersion: "1.9.0.051",
+    clientVersion: "1.9.0.052",
     connectionState: "connected",
     mapId: 5,
     player: {

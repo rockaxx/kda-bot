@@ -108,7 +108,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
 }
 
 function snapshot(timestamp = 1000) {
-  return { timestamp, clientVersion: "1.9.0.051", connectionState: "connected",
+  return { timestamp, clientVersion: "1.9.0.052", connectionState: "connected",
     mapId: 17, premiumState: "inactive", players: [] };
 }
 
@@ -412,7 +412,7 @@ test("unsupported source fingerprint diagnostics mark C-KDA unsupported even whe
 test("mismatched adapter version clears C-KDA markers without touching BOT runtime", () => {
   const app = setup();
   app.snapshot(snapshot());
-  app.diagnostic({ patchStatus: "patched", clientVersion: "1.9.0.052" });
+  app.diagnostic({ patchStatus: "patched", clientVersion: "1.9.0.053" });
   assert.equal(app.calls.statusText, "Unsupported client");
   assert.equal(app.model().ckdaSnapshot, null);
   assert.deepEqual(app.calls.canvas.at(-1), { clear: true });

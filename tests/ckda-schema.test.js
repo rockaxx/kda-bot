@@ -8,7 +8,7 @@ const {
 
 const validSnapshot = {
   timestamp: 1000,
-  clientVersion: "1.9.0.051",
+  clientVersion: "1.9.0.052",
   connectionState: "connected",
   mapId: 17,
   premiumState: "inactive",
@@ -42,7 +42,7 @@ test("accepts C-KDA snapshots and copies only declared keys", () => {
 test("rejects C-KDA snapshots from an unknown client version", () => {
   const result = validateCkdaSnapshot({
     ...validSnapshot,
-    clientVersion: "1.9.0.052"
+    clientVersion: "1.9.0.053"
   });
 
   assert.equal(result.ok, false);

@@ -5,10 +5,35 @@
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
 
-  const CLIENT_VERSION = "1.9.0.051";
+  const CLIENT_VERSION = "1.9.0.052";
   const BUILD_MARKER_PATTERN =
     /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
   const CLIENT_FINGERPRINTS = Object.freeze([
+    Object.freeze({
+      version: "1.9.0.052",
+      markers: Object.freeze([
+        "_0x1bdc1e['mapId']",
+        "_0x13411e['ship']",
+        "_0x456f25['gamepadTargeter']",
+        "_0x29d06a['initListeners']",
+        "_0xa7de8f['followX']",
+        "_0x3ce5a6['handleWriteLog']",
+        "_0x3a7293['initiateConnection']()",
+        "['addEmpNew']",
+        "'instaShield'",
+        "'tshield'",
+        "['updatePremium']"
+      ]),
+      roots: Object.freeze({
+        input: "_0x29d06a",
+        ui: "_0x3ce5a6",
+        user: "_0x13411e",
+        network: "_0x3a7293",
+        camera: "_0xa7de8f",
+        world: "_0x1bdc1e",
+        renderer: "_0x456f25"
+      })
+    }),
     Object.freeze({
       version: "1.9.0.051",
       markers: Object.freeze([

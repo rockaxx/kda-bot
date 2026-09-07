@@ -1,7 +1,7 @@
 # KDA
 
 Chrome extension for the authorized Space Aces NPC-only bot. The current build
-is **Phase 3 / ACTIVE**: it recognizes client `1.9.0.051`, detects the current
+is **Phase 3 / ACTIVE**: it recognizes client `1.9.0.052`, detects the current
 map automatically, selects verified NPCs, presses the configured ammo bind, and
 kites through the game's normal movement path.
 
@@ -99,11 +99,11 @@ Expected: all tests pass and `extension check passed`.
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
 The **KDA** panel should appear in the top-right. Press `N` to hide or show it.
-The adapter row should become `Ready` for client `1.9.0.051`. Map, HP, and
+The adapter row should become `Ready` for client `1.9.0.052`. Map, HP, and
 NPC count should populate. **START BOT** then becomes enabled.
 
 If C-KDA shows **Unsupported client**, confirm the page is fully reloaded after
-extension reload and that the live client is exactly `1.9.0.051`. Use **Export
+extension reload and that the live client is exactly `1.9.0.052`. Use **Export
 data** to capture the sanitized diagnostic, then review the adapter fingerprint
 before changing any support marker. Do not enable C-KDA/Premium workarounds for
 another client version; BOT remains fail-closed on unknown builds.

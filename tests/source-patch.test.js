@@ -26,6 +26,14 @@ const latestRoots =
   "_0x1db4fd['initiateConnection']();" +
   "_0x27bad5['addEmpNew'];'instaShield';'tshield';_0x3154af['updatePremium'];";
 
+const nextRoots =
+  "let _0x29d06a,_0x3ce5a6,_0x13411e,_0x3a7293,_0xa7de8f,_0x1bdc1e,_0x456f25;" +
+  "_0x1bdc1e['mapId'];_0x13411e['ship'];" +
+  "_0x456f25['gamepadTargeter'];_0x29d06a['initListeners'];" +
+  "_0xa7de8f['followX'];_0x3ce5a6['handleWriteLog'];" +
+  "_0x3a7293['initiateConnection']();" +
+  "_0x1bdc1e['addEmpNew'];'instaShield';'tshield';_0x13411e['updatePremium'];";
+
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
 
@@ -58,6 +66,22 @@ test("patches current client with its exact seven root symbols", () => {
   assert.match(result.source, /get world\(\).*_0x27bad5/s);
   assert.match(result.source, /get renderer\(\).*_0x4bfb8d/s);
   assert.match(result.source, /get network\(\).*_0x1db4fd/s);
+});
+
+test("patches 1.9.0.052 with its exact seven root symbols", () => {
+  const result = patchGameSource(
+    `const _0xcurrent='1.9.0.052';${nextRoots}`
+  );
+
+  assert.equal(result.status, "patched");
+  assert.equal(result.version, "1.9.0.052");
+  assert.match(result.source, /get input\(\).*_0x29d06a/s);
+  assert.match(result.source, /get ui\(\).*_0x3ce5a6/s);
+  assert.match(result.source, /get user\(\).*_0x13411e/s);
+  assert.match(result.source, /get network\(\).*_0x3a7293/s);
+  assert.match(result.source, /get camera\(\).*_0xa7de8f/s);
+  assert.match(result.source, /get world\(\).*_0x1bdc1e/s);
+  assert.match(result.source, /get renderer\(\).*_0x456f25/s);
 });
 
 test("uses the known current fingerprint version when source has no literal", () => {

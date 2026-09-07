@@ -5,7 +5,7 @@ const { createController } = require("../src/controller.js");
 function snapshot(overrides = {}) {
   return {
     timestamp: 1000,
-    clientVersion: "1.9.0.051",
+    clientVersion: "1.9.0.052",
     connectionState: "connected",
     mapId: 7,
     player: {
@@ -62,7 +62,7 @@ test("selects NPCs on whichever map is currently active", () => {
 test("accepts the current client version", () => {
   const controller = createController({ settings, now: () => 1000 });
   controller.start();
-  controller.update(snapshot({ clientVersion: "1.9.0.051" }));
+  controller.update(snapshot({ clientVersion: "1.9.0.052" }));
 
   assert.equal(controller.getState().name, "SEARCHING");
   assert.notEqual(controller.getState().reason, "unsupported-client-version");

@@ -35,7 +35,7 @@
     empCooldownMs: { min: "1000", max: "120000", step: "1000" },
     ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
   });
-  const EXPECTED_CLIENT_VERSION = "1.9.0.051";
+  const EXPECTED_CLIENT_VERSION = "1.9.0.052";
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);

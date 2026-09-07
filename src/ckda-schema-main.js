@@ -9,7 +9,7 @@
 
   const CKDA_CHANNEL = "sa-ckda-v1";
   const CKDA_MAX_ENVELOPE_BYTES = 4096;
-  const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.051";
+  const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.052";
   const CONNECTION_STATES = new Set([
     "connected",
     "connecting",
