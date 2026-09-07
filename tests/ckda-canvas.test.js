@@ -105,8 +105,9 @@ function createDom() {
     style: {},
     width: 0,
     height: 0,
+    isConnected: false,
     getContext() { return context; },
-    remove() { this.removed = true; }
+    remove() { this.removed = true; this.isConnected = false; }
   };
   const listeners = new Map();
   const rafs = new Map();
@@ -126,16 +127,30 @@ function createDom() {
   };
   return {
     documentRef: {
-      body: { append(canvas) { this.child = canvas; } },
+      body: { append(canvas) { this.child = canvas; canvas.isConnected = true; } },
       createElement(tag) { assert.equal(tag, "canvas"); return canvas; }
     },
     windowRef,
     now: () => epochNow,
     setNow(value) { epochNow = value; },
     context,
-    canvas
+    canvas,
+    detachCanvas() { canvas.isConnected = false; }
   };
 }
+
+test("canvas reconnects after the game replaces its loading DOM", () => {
+  const dom = createDom();
+  const canvas = createCkdaCanvas(dom);
+  canvas.render(validSnapshot(), validSettings({ displayMode: "all" }));
+  dom.detachCanvas();
+
+  dom.windowRef.runFrame(1000);
+
+  assert.equal(dom.canvas.isConnected, true);
+  assert.equal(dom.context.calls.some(([name]) => name === "arc"), true);
+  canvas.destroy();
+});
 
 test("canvas merges rotating player observations by ID and expires each independently", () => {
   const dom = createDom();

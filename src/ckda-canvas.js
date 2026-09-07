@@ -101,6 +101,18 @@
     let frameId = null;
     let destroyed = false;
 
+    function ensureConnected() {
+      if (
+        !destroyed &&
+        canvas.isConnected === false &&
+        documentRef.body &&
+        typeof documentRef.body.append === "function"
+      ) {
+        documentRef.body.append(canvas);
+      }
+      return canvas.isConnected !== false;
+    }
+
     function viewport() {
       const width = Number.isFinite(windowRef.innerWidth) && windowRef.innerWidth >= 0
         ? windowRef.innerWidth : 0;
@@ -164,6 +176,7 @@
     }
 
     function draw() {
+      if (!ensureConnected()) return;
       const viewportSize = resize();
       erase(viewportSize);
       const timestamp = currentTime();
