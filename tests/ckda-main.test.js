@@ -2,8 +2,131 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   createCkdaSnapshot,
+  findUniquePrototypeMethod,
+  installEffectHooks,
   startCkdaPublisher
 } = require("../src/ckda-main.js");
+
+test("finds exactly one semantic ISH prototype method without invoking it", () => {
+  let candidateCalled = false;
+  const proto = {
+    hiddenIsh(target) {
+      candidateCalled = true;
+      return "instaShield tshield" + target.ID;
+    },
+    unrelated() { return "instaShield"; }
+  };
+  const world = Object.create(proto);
+
+  assert.equal(
+    findUniquePrototypeMethod(world, ["instaShield", "tshield"]),
+    "hiddenIsh"
+  );
+  assert.equal(candidateCalled, false);
+
+  proto.second = function () { return "instaShield tshield"; };
+  assert.equal(
+    findUniquePrototypeMethod(world, ["instaShield", "tshield"]),
+    null
+  );
+});
+
+test("effect hooks preserve calls and restore original world prototype descriptors", () => {
+  const calls = [];
+  const cooldowns = {
+    activate(kind, id, duration) { calls.push({ kind, id, duration }); }
+  };
+  const prototype = {};
+  function addEmpNew(target, ...rest) {
+    return { receiver: this, args: [target, ...rest], kind: "emp" };
+  }
+  function hiddenIsh(target, ...rest) {
+    return { receiver: this, args: [target, ...rest], kind: "ish", text: "instaShield tshield" };
+  }
+  Object.defineProperty(prototype, "addEmpNew", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: addEmpNew
+  });
+  Object.defineProperty(prototype, "hiddenIsh", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: hiddenIsh
+  });
+  const world = Object.create(prototype);
+  const beforeEmp = Object.getOwnPropertyDescriptor(prototype, "addEmpNew");
+  const beforeIsh = Object.getOwnPropertyDescriptor(prototype, "hiddenIsh");
+  const target = { ID: 88 };
+
+  const hooks = installEffectHooks(world, cooldowns, {
+    empCooldownMs: 28000,
+    ishCooldownMs: 19000
+  });
+
+  assert.equal(hooks.supported, true);
+  assert.deepEqual(world.addEmpNew(target, "emp-arg"), {
+    receiver: world,
+    args: [target, "emp-arg"],
+    kind: "emp"
+  });
+  assert.deepEqual(world.hiddenIsh(target, "ish-arg"), {
+    receiver: world,
+    args: [target, "ish-arg"],
+    kind: "ish",
+    text: "instaShield tshield"
+  });
+  assert.deepEqual(calls, [
+    { kind: "emp", id: 88, duration: 28000 },
+    { kind: "ish", id: 88, duration: 19000 }
+  ]);
+  assert.equal(
+    installEffectHooks(world, cooldowns, { empCooldownMs: 1, ishCooldownMs: 1 }).supported,
+    false
+  );
+
+  assert.equal(hooks.cleanup(), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(prototype, "addEmpNew"), beforeEmp);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(prototype, "hiddenIsh"), beforeIsh);
+  assert.equal(hooks.cleanup(), false);
+});
+
+test("effect hooks skip malformed targets and reject missing or ambiguous ISH methods", () => {
+  const calls = [];
+  const cooldowns = { activate(...args) { calls.push(args); } };
+  const noIshWorld = Object.create({ addEmpNew() { return "emp"; } });
+  assert.equal(
+    installEffectHooks(noIshWorld, cooldowns, { empCooldownMs: 1, ishCooldownMs: 1 }).supported,
+    false
+  );
+
+  const ambiguousProto = {
+    addEmpNew() { return "emp"; },
+    one() { return "instaShield tshield"; },
+    two() { return "instaShield tshield"; }
+  };
+  const ambiguousWorld = Object.create(ambiguousProto);
+  assert.equal(
+    installEffectHooks(ambiguousWorld, cooldowns, { empCooldownMs: 1, ishCooldownMs: 1 }).supported,
+    false
+  );
+
+  const proto = {
+    addEmpNew(target) { return target; },
+    hiddenIsh(target) { return "instaShield tshield" + String(target); }
+  };
+  const world = Object.create(proto);
+  const hooks = installEffectHooks(world, cooldowns, {
+    empCooldownMs: 1,
+    ishCooldownMs: 1
+  });
+  const malformed = { ID: null };
+  assert.equal(world.addEmpNew(malformed), malformed);
+  assert.equal(world.hiddenIsh(malformed), "instaShield tshield[object Object]");
+  assert.deepEqual(calls, []);
+  hooks.cleanup();
+});
 
 function mapShip(id, fields = {}) {
   return {

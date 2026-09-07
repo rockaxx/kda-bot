@@ -23,7 +23,8 @@ const latestRoots =
   "_0x27bad5['mapId'];_0x4e6c8d['ship'];" +
   "_0x4bfb8d['gamepadTargeter'];_0x312959['initListeners'];" +
   "_0x5608bd['followX'];_0x3154af['handleWriteLog'];" +
-  "_0x1db4fd['initiateConnection']();";
+  "_0x1db4fd['initiateConnection']();" +
+  "_0x27bad5['addEmpNew'];'instaShield';'tshield';_0x3154af['updatePremium'];";
 
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
@@ -75,6 +76,22 @@ test("rejects a current-like fingerprint without the mapped network root", () =>
   );
 
   assert.equal(patchGameSource(withoutNetwork).status, "unsupported");
+});
+
+test("rejects a current-like fingerprint without required EMP and ISH semantics", () => {
+  const withoutIsh = latestRoots.replace("'tshield';", "");
+  const result = patchGameSource(withoutIsh);
+
+  assert.equal(result.status, "unsupported");
+  assert.equal(result.source, withoutIsh);
+});
+
+test("leaves ambiguous client fingerprints byte-identical", () => {
+  const source = `${latestRoots}${currentRoots}`;
+  const result = patchGameSource(source);
+
+  assert.equal(result.status, "unsupported");
+  assert.equal(result.source, source);
 });
 
 test("leaves unknown versions byte-identical", () => {

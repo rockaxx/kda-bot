@@ -18,7 +18,11 @@
         "_0x312959['initListeners']",
         "_0x5608bd['followX']",
         "_0x3154af['handleWriteLog']",
-        "_0x1db4fd['initiateConnection']()"
+        "_0x1db4fd['initiateConnection']()",
+        "['addEmpNew']",
+        "'instaShield'",
+        "'tshield'",
+        "['updatePremium']"
       ]),
       roots: Object.freeze({
         input: "_0x312959",
@@ -79,12 +83,13 @@
 
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
-    const fingerprint = CLIENT_FINGERPRINTS.find(({ markers }) =>
+    const fingerprints = CLIENT_FINGERPRINTS.filter(({ markers }) =>
       markers.every((marker) => source.includes(marker))
     );
-    if (!fingerprint) {
+    if (fingerprints.length !== 1) {
       return unsupported(source, "root-fingerprint-mismatch");
     }
+    const [fingerprint] = fingerprints;
     const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
     if (buildMarkers.length > 1) {
       return unsupported(source, "version-marker-ambiguous");
