@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { formatCkdaStatus, isSupportedDiagnostic } = require("../src/overlay.js");
 
 function eventTarget() {
   const listeners = new Map();
@@ -17,7 +18,7 @@ function eventTarget() {
   };
 }
 
-function setup(stored = {}, deferred = false, failBridge = false) {
+function setup(stored = {}, deferred = false, failBridge = false, storageSet = () => Promise.resolve()) {
   const window = eventTarget();
   const document = { ...eventTarget(), visibilityState: "visible" };
   const calls = { commands: [], saves: [], canvas: [], botSnapshots: [], destroyed: [], starts: 0, stops: 0 };
@@ -39,7 +40,7 @@ function setup(stored = {}, deferred = false, failBridge = false) {
     whenDocumentReady(_document, callback) { callback(); },
     createController: () => ({ getState: runtime.getState }),
     createLogger: () => ({ add() {}, list: () => [] }),
-    isSupportedDiagnostic: () => true,
+    isSupportedDiagnostic,
     canStartBot: () => true,
     createRuntime: () => runtime,
     createBridge(value) {
@@ -66,13 +67,16 @@ function setup(stored = {}, deferred = false, failBridge = false) {
     },
     createOverlay(value) {
       options = value;
-      return { render(value) { model = value; }, destroy() { calls.destroyed.push("overlay"); } };
+      return {
+        render(value) { model = value; calls.statusText = formatCkdaStatus(value.ckdaStatus, value.ckdaSnapshot); },
+        destroy() { calls.destroyed.push("overlay"); }
+      };
     },
     installEmergencyStop: () => () => calls.destroyed.push("shortcut")
   };
   const chrome = { storage: { local: {
     get(keys, callback) { calls.keys = keys; storageCallback = callback; if (!deferred) callback(stored); },
-    set(value) { calls.saves.push(value); }
+    set(value) { calls.saves.push(value); return storageSet(value); }
   } } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../src/content.js"), "utf8"), {
     window, document, chrome, TextEncoder
@@ -82,6 +86,7 @@ function setup(stored = {}, deferred = false, failBridge = false) {
     snapshot(value) { ckdaBridge?.onSnapshot(value); },
     result(value) { ckdaBridge?.onResult(value); },
     botSnapshot(value) { botBridge.onSnapshot(value); },
+    diagnostic(value) { botBridge.onDiagnostic(value); },
     load() { storageCallback(stored); },
     throwCanvas() { canvasThrows = true; }
   };
@@ -100,17 +105,17 @@ test("content loads independent C-KDA defaults and initializes MAIN settings", (
   assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "refresh"]);
 });
 
-test("C-KDA saves normalized settings and updates canvas and Premium independently", () => {
+test("C-KDA saves normalized settings and updates canvas and Premium independently", async () => {
   const app = setup({ ckdaSettings: { shape: "star" } });
   app.snapshot(snapshot());
   assert.equal(app.model().ckdaSettings.shape, "star");
-  assert.equal(app.options().onSaveCkda({ sizePx: 11, premiumOverride: true, extra: "discard" }), true);
+  assert.equal(await app.options().onSaveCkda({ sizePx: 11, premiumOverride: true, extra: "discard" }), true);
   assert.equal(app.calls.saves.length, 1);
   assert.equal(app.calls.saves[0].ckdaSettings.sizePx, 11);
   assert.equal(app.calls.saves[0].ckdaSettings.extra, undefined);
   assert.equal(app.calls.canvas.at(-1).settings.sizePx, 11);
   assert.equal(app.calls.commands.filter(value => value.type === "set-premium").at(-1).payload.enabled, true);
-  assert.equal(app.options().onSaveCkda({ sizePx: -1 }), false);
+  assert.equal(await app.options().onSaveCkda({ sizePx: -1 }), false);
   assert.equal(app.calls.saves.length, 1);
   assert.equal(app.model().ckdaSettings.sizePx, 11);
   assert.equal(app.calls.destroyed.length, 0);
@@ -209,4 +214,77 @@ test("C-KDA bridge startup failure still initializes BOT and reports C-KDA error
   assert.equal(app.model().ckdaStatus.state, "error");
   app.window.emit("pagehide");
   assert.equal(app.calls.destroyed.includes("runtime"), true);
+});
+
+test("MAIN error results and local listener errors render visible C-KDA errors", () => {
+  const app = setup();
+  app.snapshot({ ...snapshot(), premiumState: "active" });
+  app.result({ type: "set-premium", requestId: 1, state: "error" });
+  assert.equal(app.calls.statusText, "C-KDA error");
+  assert.equal(app.model().ckdaStatus.state, "error");
+  app.snapshot(snapshot());
+  assert.equal(app.calls.statusText, "C-KDA error");
+  app.throwCanvas();
+  app.snapshot(snapshot());
+  assert.equal(app.calls.statusText, "C-KDA error");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("unsupported source fingerprint diagnostics mark C-KDA unsupported even when no roots arrive", () => {
+  const app = setup({}, true);
+  app.diagnostic({ patchStatus: "unsupported", clientVersion: null, reason: "root-fingerprint-mismatch" });
+  app.load();
+  assert.equal(app.calls.statusText, "Unsupported client");
+  app.document.emit("visibilitychange");
+  assert.equal(app.calls.statusText, "Unsupported client");
+  assert.equal(app.model().ckdaSnapshot, null);
+  app.snapshot(snapshot());
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.equal(app.calls.statusText, "Unsupported client");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("mismatched adapter version clears C-KDA markers without touching BOT runtime", () => {
+  const app = setup();
+  app.snapshot(snapshot());
+  app.diagnostic({ patchStatus: "patched", clientVersion: "1.9.0.052" });
+  assert.equal(app.calls.statusText, "Unsupported client");
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("rejected C-KDA storage save returns failure without applying settings or Premium", async () => {
+  let rejectSave = true;
+  const app = setup({}, false, false, () => rejectSave ? Promise.reject(new Error("storage unavailable")) : Promise.resolve());
+  app.snapshot(snapshot());
+  const commandCount = app.calls.commands.length;
+  assert.equal(await app.options().onSaveCkda({ premiumOverride: true, sizePx: 11 }), false);
+  assert.equal(app.model().ckdaSettings.premiumOverride, false);
+  assert.equal(app.model().ckdaSettings.sizePx, 8);
+  assert.equal(app.calls.commands.length, commandCount);
+  assert.equal(app.calls.statusText, "C-KDA save failed");
+  app.snapshot(snapshot());
+  assert.equal(app.calls.statusText, "C-KDA save failed");
+  app.document.emit("visibilitychange");
+  assert.equal(app.calls.statusText, "C-KDA save failed");
+  rejectSave = false;
+  assert.equal(await app.options().onSaveCkda({ sizePx: 11 }), true);
+  assert.notEqual(app.calls.statusText, "C-KDA save failed");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("C-KDA save waits for storage completion and ignores completion after pagehide", async () => {
+  let completeSave;
+  const app = setup({}, false, false, () => new Promise(resolve => { completeSave = resolve; }));
+  const commandCount = app.calls.commands.length;
+  const saved = app.options().onSaveCkda({ premiumOverride: true });
+  assert.equal(app.calls.commands.length, commandCount);
+  assert.equal(await app.options().onSaveCkda({ sizePx: 12 }), false);
+  assert.equal(app.calls.saves.length, 1);
+  assert.equal(app.model().ckdaSettings.premiumOverride, false);
+  app.window.emit("pagehide");
+  completeSave();
+  assert.equal(await saved, false);
+  assert.equal(app.calls.commands.length, commandCount);
 });

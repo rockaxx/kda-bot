@@ -8,6 +8,7 @@
   "use strict";
 
   const CKDA_CHANNEL = "sa-ckda-v1";
+  const CKDA_MAX_ENVELOPE_BYTES = 4096;
   const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.051";
   const CONNECTION_STATES = new Set([
     "connected",
@@ -158,6 +159,7 @@
 
   return {
     CKDA_CHANNEL,
+    CKDA_MAX_ENVELOPE_BYTES,
     isPlainObject,
     validateCkdaEnvelope,
     validateCkdaSnapshot

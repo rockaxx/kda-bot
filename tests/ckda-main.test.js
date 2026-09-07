@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { createCkdaBridge, MAX_CKDA_PAYLOAD_BYTES } = require("../src/ckda-bridge.js");
 const {
   createPremiumOverride,
   createCkdaSnapshot,
@@ -742,4 +743,30 @@ test("manifest MAIN scripts auto-install once even when the entry point is evalu
   windowRef.emit("pagehide");
   assert.equal(windowRef.__SA_BOT_ROOTS__.user.isPremium, false);
   assert.equal(windowRef.timers.size, 0);
+});
+
+test("real publisher delivers a deterministic bounded snapshot through the bridge with 32 players", () => {
+  const roots = liveRoots();
+  roots.world.MAP_SHIPS = new Map(Array.from({ length: 32 }, (_, index) => {
+    const ship = mapShip(`player-${index}-é`);
+    return [ship.ID, ship];
+  }));
+  const windowRef = installerWindow(roots);
+  const received = [];
+  windowRef.postMessage = function (message) {
+    this.messages.push(message);
+    this.emit("message", { source: this, data: structuredClone(message) });
+  };
+  const bridge = createCkdaBridge({ windowRef, onSnapshot: value => received.push(value) });
+  const publisher = startCkdaPublisher(windowRef, roots, { now: () => 1788788333437 });
+  assert.equal(received.length, 1);
+  assert.ok(received[0].players.length > 0);
+  assert.ok(received[0].players.length < 32);
+  assert.ok(new TextEncoder().encode(JSON.stringify(windowRef.messages[0])).byteLength <= MAX_CKDA_PAYLOAD_BYTES);
+  assert.deepEqual(received[0].players.map(player => player.id),
+    Array.from({ length: received[0].players.length }, (_, index) => `player-${index}-é`));
+  publisher.refresh();
+  assert.deepEqual(received[1], received[0]);
+  publisher.stop();
+  bridge.destroy();
 });

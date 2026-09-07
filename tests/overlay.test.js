@@ -158,6 +158,35 @@ test("C-KDA drafts survive telemetry renders until successful save", () => {
   assert.equal(inputs.shape.value, "plus");
 });
 
+test("C-KDA async save preserves rejected and newer drafts and clears only confirmed drafts", async () => {
+  const defaults = require("../src/ckda-settings.js").CKDA_DEFAULT_SETTINGS;
+  const listeners = {};
+  const inputs = Object.fromEntries(Object.keys(defaults).map(key => [key, {
+    checked: false, value: "",
+    addEventListener(name, fn) { listeners[`${key}:${name}`] = fn; }
+  }]));
+  const form = createCkdaFormState(inputs);
+  form.sync(defaults);
+  inputs.sizePx.value = "11";
+  listeners["sizePx:input"]();
+  await form.submit(() => Promise.resolve(false));
+  form.sync(defaults);
+  assert.equal(inputs.sizePx.value, "11");
+  await form.submit(() => Promise.resolve(true));
+  form.sync(defaults);
+  assert.equal(inputs.sizePx.value, "8");
+  inputs.sizePx.value = "12";
+  listeners["sizePx:input"]();
+  let complete;
+  const pending = form.submit(() => new Promise(resolve => { complete = resolve; }));
+  inputs.sizePx.value = "13";
+  listeners["sizePx:input"]();
+  complete(true);
+  await pending;
+  form.sync(defaults);
+  assert.equal(inputs.sizePx.value, "13");
+});
+
 test("C-KDA status uses compact human-readable labels", () => {
   assert.equal(formatCkdaStatus("ready"), "Ready");
   assert.equal(formatCkdaStatus("waiting-for-game"), "Waiting for game");
@@ -174,6 +203,31 @@ test("C-KDA Premium snapshot state outranks ready and no-player-data status", ()
   assert.equal(formatCkdaStatus("no-player-data", activeSnapshot), "Premium override active");
   assert.equal(formatCkdaStatus("ready", unsupportedSnapshot), "Premium override unsupported");
   assert.equal(formatCkdaStatus("no-player-data", unsupportedSnapshot), "Premium override unsupported");
+});
+
+test("C-KDA failure labels stay visible above stale Premium snapshot state", () => {
+  const activeSnapshot = { connectionState: "connected", premiumState: "active", players: [] };
+  assert.equal(formatCkdaStatus({ state: "error" }, activeSnapshot), "C-KDA error");
+  assert.equal(formatCkdaStatus({ state: "save-failed" }, activeSnapshot), "C-KDA save failed");
+  assert.equal(formatCkdaStatus({ state: "unsupported-client" }, activeSnapshot), "Unsupported client");
+});
+
+test("overlay renders C-KDA failures in the visible status metric", () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({ documentRef });
+    const statusLabel = elements.find(element => element.textContent === "Status");
+    const statusValue = statusLabel.parentNode.children[1];
+    for (const [state, label] of [["error", "C-KDA error"], ["save-failed", "C-KDA save failed"], ["unsupported-client", "Unsupported client"]]) {
+      overlay.render({ ckdaStatus: { state }, ckdaSnapshot: { premiumState: "active", players: [] } });
+      assert.equal(statusValue.textContent, label);
+    }
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
 });
 
 test("C-KDA controls bind every label and expose schema-aligned numeric bounds", () => {

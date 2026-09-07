@@ -416,15 +416,19 @@
         if (!snapshot || !windowRef || typeof windowRef.postMessage !== "function") {
           return null;
         }
-        windowRef.postMessage(
-          {
-            channel: dependency.CKDA_CHANNEL,
-            direction: "snapshot",
-            payload: snapshot
-          },
-          "*"
-        );
-        return snapshot;
+        const payload = { ...snapshot, players: [] };
+        const envelope = { channel: dependency.CKDA_CHANNEL, direction: "snapshot", payload };
+        const encoder = new TextEncoder();
+        let bytes = encoder.encode(JSON.stringify(envelope)).byteLength;
+        // Preserve a deterministic prefix within the receiver's complete-envelope budget.
+        for (const player of snapshot.players) {
+          const addedBytes = encoder.encode(JSON.stringify(player)).byteLength + (payload.players.length ? 1 : 0);
+          if (bytes + addedBytes > dependency.CKDA_MAX_ENVELOPE_BYTES) break;
+          payload.players.push(player);
+          bytes += addedBytes;
+        }
+        windowRef.postMessage(envelope, "*");
+        return payload;
       } catch (_) {
         cooldowns.clearAll();
         return null;
@@ -455,7 +459,7 @@
   function validatedCommand(event, windowRef) {
     try {
       if (!event || event.source !== windowRef) return null;
-      if (new TextEncoder().encode(JSON.stringify(event.data)).byteLength > 4096) return null;
+      if (new TextEncoder().encode(JSON.stringify(event.data)).byteLength > dependency.CKDA_MAX_ENVELOPE_BYTES) return null;
       const envelope = dependency.validateCkdaEnvelope(event.data, "command");
       if (!envelope.ok) return null;
       const value = envelope.value.payload;

@@ -59,6 +59,7 @@
     let snapshot = null;
     let runtime = null;
     let ckdaSettings = api.normalizeCkdaSettings(stored.ckdaSettings || {}).value;
+    let ckdaSaving = false;
     let ckdaSnapshot = null;
     let ckdaStatus = { state: ckdaStartupFailed ? "error" : "waiting-for-game" };
     let ckdaCanvas = null;
@@ -92,8 +93,10 @@
     }
 
     function ckdaAction(action) {
-      try { action(); } catch (_) { ckdaStatus = { state: "error" }; }
-      try { render(); } catch (_) { ckdaStatus = { state: "error" }; }
+      let ok = true;
+      try { action(); } catch (_) { ckdaStatus = { state: "error" }; ok = false; }
+      try { render(); } catch (_) { ckdaStatus = { state: "error" }; ok = false; }
+      return ok;
     }
 
     function configureCkda() {
@@ -108,7 +111,9 @@
     function clearCkda() {
       ckdaSnapshot = null;
       ckdaCanvas?.clear();
-      ckdaStatus = { state: "waiting-for-game" };
+      if (!["error", "save-failed", "unsupported-client"].includes(ckdaStatus.state)) {
+        ckdaStatus = { state: "waiting-for-game" };
+      }
     }
 
     function visibilityChanged() {
@@ -157,16 +162,28 @@
         render();
         return candidate.ok;
       },
-      onSaveCkda(rawSettings) {
+      async onSaveCkda(rawSettings) {
+        if (unloaded || ckdaSaving) return false;
         const candidate = api.normalizeCkdaSettings(rawSettings);
         if (!candidate.ok) return false;
-        ckdaSettings = candidate.value;
-        ckdaAction(() => {
-          chrome.storage.local.set({ ckdaSettings: { ...ckdaSettings } });
-          configureCkda();
-          ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
-        });
-        return true;
+        ckdaSaving = true;
+        try {
+          await chrome.storage.local.set({ ckdaSettings: { ...candidate.value } });
+          if (unloaded) return false;
+          ckdaSettings = candidate.value;
+          if (ckdaStatus.state !== "unsupported-client") {
+            ckdaStatus = { state: ckdaStartupFailed ? "error" : "waiting-for-game" };
+          }
+          return ckdaAction(() => {
+            configureCkda();
+            ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
+          });
+        } catch (_) {
+          if (!unloaded) ckdaAction(() => { ckdaStatus = { state: "save-failed" }; });
+          return false;
+        } finally {
+          ckdaSaving = false;
+        }
       },
       onCkdaCommand(type) {
         if (type !== "clear") return;
@@ -199,6 +216,13 @@
     };
     receiveDiagnostic = (value) => {
       diagnostic = value;
+      if (value.patchStatus === "unsupported" ||
+          (value.patchStatus === "patched" && !api.isSupportedDiagnostic(value))) {
+        ckdaAction(() => {
+          clearCkda();
+          ckdaStatus = { state: "unsupported-client" };
+        });
+      }
       logger.add("adapter", {
         patchStatus: value.patchStatus,
         clientVersion: value.clientVersion,
@@ -220,15 +244,19 @@
       render();
     };
     receiveCkdaSnapshot = (value) => ckdaAction(() => {
+      if (ckdaStatus.state === "unsupported-client") return;
       const checked = api.validateCkdaSnapshot(value);
       if (!checked.ok) return;
       ckdaSnapshot = checked.value;
-      ckdaStatus = { state: ckdaSnapshot.players.length ? "ready" : "no-player-data" };
+      if (!["error", "save-failed", "unsupported-client"].includes(ckdaStatus.state)) {
+        ckdaStatus = { state: ckdaSnapshot.players.length ? "ready" : "no-player-data" };
+      }
       ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
     });
     receiveCkdaResult = (value) => ckdaAction(() => {
       if (value.type === "ready") configureCkda();
       else if (value.state === "unsupported-client") ckdaStatus = { state: value.state };
+      else if (value.state === "error") ckdaStatus = { state: "error" };
     });
     if (pendingDiagnostic) receiveDiagnostic(pendingDiagnostic);
     if (pendingSource) receiveSource(pendingSource);

@@ -9,7 +9,7 @@
 })(typeof window === "object" ? window : null, function createApi(dependency) {
   "use strict";
 
-  const MAX_CKDA_PAYLOAD_BYTES = 4096;
+  const MAX_CKDA_PAYLOAD_BYTES = dependency.CKDA_MAX_ENVELOPE_BYTES;
   const COMMAND_TYPES = new Set([
     "set-premium",
     "configure-effects",

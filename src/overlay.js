@@ -47,8 +47,9 @@
 
   function createFormState(inputs, definitions) {
     const dirtyFields = new Set();
+    let editRevision = 0;
     for (const [key] of definitions) {
-      const markDirty = () => dirtyFields.add(key);
+      const markDirty = () => { dirtyFields.add(key); editRevision += 1; };
       inputs[key].addEventListener("input", markDirty);
       inputs[key].addEventListener("change", markDirty);
     }
@@ -79,8 +80,14 @@
     }
 
     function submit(onSave) {
+      const submittedRevision = editRevision;
       const result = onSave(read());
-      if (result === true) dirtyFields.clear();
+      function finish(accepted) {
+        if (accepted === true && editRevision === submittedRevision) dirtyFields.clear();
+        return accepted === true;
+      }
+      if (result && typeof result.then === "function") return Promise.resolve(result).then(finish, () => false);
+      return finish(result);
     }
 
     return { read, submit, sync };
@@ -98,6 +105,9 @@
 
   function formatCkdaStatus(status, snapshot) {
     const state = typeof status === "string" ? status : status && status.state;
+    if (state === "error") return "C-KDA error";
+    if (state === "save-failed") return "C-KDA save failed";
+    if (state === "unsupported-client") return "Unsupported client";
     if (snapshot?.premiumState === "active") return "Premium override active";
     if (snapshot?.premiumState === "unsupported") return "Premium override unsupported";
     const labels = {
