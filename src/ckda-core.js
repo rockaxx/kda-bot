@@ -17,11 +17,7 @@
   function hasAllyRelation(value) {
     if (typeof value !== "string") return false;
     const normalized = value.trim().toLowerCase();
-    return (
-      normalized.includes("ally") ||
-      normalized.includes("friend") ||
-      normalized.includes("own")
-    );
+    return /\b(?:ally|friend|own)\b/.test(normalized);
   }
 
   function classifyPlayer(entity, roots) {
@@ -78,6 +74,8 @@
       !viewport ||
       !Number.isFinite(viewport.width) ||
       !Number.isFinite(viewport.height) ||
+      viewport.width < 0 ||
+      viewport.height < 0 ||
       !Number.isFinite(staleAfterMs) ||
       staleAfterMs < 0
     ) {
@@ -112,6 +110,7 @@
   function createCooldownRegistry(now) {
     const entries = new Map();
     const clock = typeof now === "function" ? now : () => Number.NaN;
+    let lastTimestamp = null;
 
     function keyFor(kind, id) {
       return `${kind}:${typeof id}:${String(id)}`;
@@ -119,7 +118,11 @@
 
     function currentTime() {
       const value = clock();
-      return Number.isFinite(value) && value >= 0 ? value : null;
+      if (!Number.isFinite(value) || value < 0) return null;
+      if (lastTimestamp === null || value > lastTimestamp) {
+        lastTimestamp = value;
+      }
+      return lastTimestamp;
     }
 
     function validKind(kind) {

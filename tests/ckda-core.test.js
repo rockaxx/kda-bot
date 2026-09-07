@@ -55,6 +55,10 @@ test("normalizes textual ally relations", () => {
     classifyPlayer({ ID: 9, isNpc: false, clanRelation: "hostile" }, roots),
     "enemy"
   );
+  assert.equal(
+    classifyPlayer({ ID: 10, isNpc: false, clanRelation: "unknown" }, roots),
+    "enemy"
+  );
 });
 
 test("projects player origin through renderer wrapper", () => {
@@ -94,6 +98,22 @@ test("filters visible cloaked players without changing input records", () => {
   assert.deepEqual(players.map((item) => item.id), [1, 2, 3, 4]);
 });
 
+test("fails closed for negative viewport dimensions", () => {
+  const players = [
+    { id: 1, screenX: 20, screenY: 20, cloaked: true, observedAt: 900 }
+  ];
+  const settings = { overlayEnabled: true, displayMode: "masked-only" };
+
+  assert.deepEqual(
+    filterVisiblePlayers(players, settings, 1000, { width: -1, height: 100 }),
+    []
+  );
+  assert.deepEqual(
+    filterVisiblePlayers(players, settings, 1000, { width: 100, height: -1 }),
+    []
+  );
+});
+
 test("keeps original cooldown end for duplicate activations within 250 ms", () => {
   let current = 1000;
   const registry = createCooldownRegistry(() => current);
@@ -123,4 +143,15 @@ test("removes expired cooldowns and supports targeted and global clearing", () =
   registry.activate("ish", 7, 28000);
   registry.clearAll();
   assert.deepEqual(registry.read(7), { empEndsAt: null, ishEndsAt: null });
+});
+
+test("does not shorten cooldowns when monotonic clock source rolls backward", () => {
+  let current = 1000;
+  const registry = createCooldownRegistry(() => current);
+
+  registry.activate("emp", 7, 28000);
+  current = 900;
+  registry.activate("emp", 7, 28000);
+
+  assert.equal(registry.read(7).empEndsAt, 29000);
 });
