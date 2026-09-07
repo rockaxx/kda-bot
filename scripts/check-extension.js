@@ -17,8 +17,8 @@ const expectedScripts = {
     "src/namespace-main.js",
     "src/source-patch.js",
     "src/page-adapter.js",
-    "src/ckda-schema.js",
-    "src/ckda-core.js",
+    "src/ckda-schema-main.js",
+    "src/ckda-core-main.js",
     "src/ckda-main.js"
   ],
   ISOLATED: [
@@ -83,6 +83,13 @@ for (const [world, scripts] of Object.entries(expectedScripts)) {
   if (!entry || JSON.stringify(entry.js) !== JSON.stringify(scripts)) {
     errors.push(`unexpected ${world} script order`);
   }
+}
+
+const sharedWorldScripts = expectedScripts.MAIN.filter((script) =>
+  expectedScripts.ISOLATED.includes(script)
+);
+if (sharedWorldScripts.length) {
+  errors.push(`script paths shared across worlds: ${sharedWorldScripts.join(", ")}`);
 }
 
 const cKdaResource = (manifest.web_accessible_resources || []).find((entry) =>

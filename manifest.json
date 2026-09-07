@@ -17,8 +17,8 @@
         "src/namespace-main.js",
         "src/source-patch.js",
         "src/page-adapter.js",
-        "src/ckda-schema.js",
-        "src/ckda-core.js",
+        "src/ckda-schema-main.js",
+        "src/ckda-core-main.js",
         "src/ckda-main.js"
       ],
       "run_at": "document_start",

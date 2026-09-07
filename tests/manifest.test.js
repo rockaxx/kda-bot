@@ -144,8 +144,8 @@ test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
     "src/namespace-main.js",
     "src/source-patch.js",
     "src/page-adapter.js",
-    "src/ckda-schema.js",
-    "src/ckda-core.js",
+    "src/ckda-schema-main.js",
+    "src/ckda-core-main.js",
     "src/ckda-main.js"
   ]);
   assert.deepEqual(isolated.js.slice(0, 6), [
@@ -158,4 +158,15 @@ test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
   ]);
   assert.ok(isolated.js.indexOf("src/ckda-canvas.js") < isolated.js.indexOf("src/overlay.js"));
   assert.ok(isolated.js.indexOf("src/ckda-bridge.js") < isolated.js.indexOf("src/content.js"));
+});
+
+test("MAIN and ISOLATED worlds never register the same script path", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, "manifest.json"), "utf8")
+  );
+  const main = manifest.content_scripts.find((entry) => entry.world === "MAIN");
+  const isolated = manifest.content_scripts.find((entry) => entry.world === "ISOLATED");
+  const overlap = main.js.filter((script) => isolated.js.includes(script));
+
+  assert.deepEqual(overlap, []);
 });
