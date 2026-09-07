@@ -4,6 +4,7 @@ game-dist*.js
 
 # Dependencies, build output, logs, and local browser state.
 node_modules/
+.worktrees/
 dist/
 coverage/
 logs/
