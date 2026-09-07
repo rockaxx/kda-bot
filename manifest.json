@@ -7,7 +7,14 @@
   "content_scripts": [
     {
       "matches": ["https://steam.space-aces.com/gameNew*"],
-      "js": ["src/namespace-main.js", "src/source-patch.js", "src/page-adapter.js"],
+      "js": [
+        "src/namespace-main.js",
+        "src/source-patch.js",
+        "src/page-adapter.js",
+        "src/ckda-schema.js",
+        "src/ckda-core.js",
+        "src/ckda-main.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
@@ -15,6 +22,9 @@
       "matches": ["https://steam.space-aces.com/gameNew*"],
       "js": [
         "src/namespace.js",
+        "src/ckda-schema.js",
+        "src/ckda-settings.js",
+        "src/ckda-core.js",
         "src/schemas.js",
         "src/settings.js",
         "src/geometry.js",

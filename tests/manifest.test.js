@@ -42,3 +42,28 @@ test("every declared script exists", () => {
     }
   }
 });
+
+test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(root, "manifest.json"), "utf8")
+  );
+  const main = manifest.content_scripts.find((entry) => entry.world === "MAIN");
+  const isolated = manifest.content_scripts.find(
+    (entry) => entry.world === "ISOLATED"
+  );
+
+  assert.deepEqual(main.js, [
+    "src/namespace-main.js",
+    "src/source-patch.js",
+    "src/page-adapter.js",
+    "src/ckda-schema.js",
+    "src/ckda-core.js",
+    "src/ckda-main.js"
+  ]);
+  assert.deepEqual(isolated.js.slice(0, 4), [
+    "src/namespace.js",
+    "src/ckda-schema.js",
+    "src/ckda-settings.js",
+    "src/ckda-core.js"
+  ]);
+});
