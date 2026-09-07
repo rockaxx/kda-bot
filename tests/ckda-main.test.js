@@ -1,11 +1,203 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
+  createPremiumOverride,
   createCkdaSnapshot,
   findUniquePrototypeMethod,
   installEffectHooks,
   startCkdaPublisher
 } = require("../src/ckda-main.js");
+
+function premiumRoots(user, version = "n1.9.0.051") {
+  return { version, user };
+}
+
+test("Premium override restores writable data descriptor and leaves platform globals native", () => {
+  const nativeJsonParse = JSON.parse;
+  const nativeResponseJson = Response.prototype.json;
+  const calls = [];
+  const user = {
+    updatePremium(value) { calls.push(value); }
+  };
+  Object.defineProperty(user, "isPremium", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: false
+  });
+  const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.state(), "inactive");
+  assert.equal(controller.enable(), true);
+  assert.equal(controller.state(), "active");
+  assert.equal(user.isPremium, true);
+  assert.deepEqual(calls, [true]);
+  assert.equal(controller.disable(), true);
+  assert.equal(controller.state(), "inactive");
+  assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+  assert.deepEqual(calls, [true, false]);
+  assert.equal(JSON.parse, nativeJsonParse);
+  assert.equal(Response.prototype.json, nativeResponseJson);
+});
+
+test("Premium override restores accessor descriptor and masks active server writes", () => {
+  const calls = [];
+  let stored = false;
+  const user = {
+    updatePremium(value) {
+      calls.push(value);
+      this.isPremium = value;
+    }
+  };
+  Object.defineProperty(user, "isPremium", {
+    configurable: true,
+    enumerable: true,
+    get() { return stored; },
+    set(value) { stored = value; }
+  });
+  const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.enable(), true);
+  user.isPremium = false;
+  assert.equal(user.isPremium, true);
+  assert.equal(stored, false);
+  assert.equal(controller.disable(), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+  assert.equal(user.isPremium, false);
+  assert.deepEqual(calls, [true, false]);
+});
+
+test("Premium override deletes temporary property when original property is absent", () => {
+  const calls = [];
+  const user = {
+    updatePremium(value) { calls.push(value); }
+  };
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.enable(), true);
+  assert.equal(user.isPremium, true);
+  assert.equal(controller.disable(), true);
+  assert.equal(Object.hasOwn(user, "isPremium"), false);
+  assert.deepEqual(calls, [true]);
+});
+
+test("Premium override restores inherited effective boolean after deleting its temporary property", () => {
+  const calls = [];
+  const user = Object.create({ isPremium: false });
+  user.updatePremium = function updatePremium(value) { calls.push(value); };
+  const controller = createPremiumOverride(premiumRoots(user), {});
+
+  assert.equal(controller.enable(), true);
+  assert.equal(user.isPremium, true);
+  assert.equal(controller.disable(), true);
+  assert.equal(Object.hasOwn(user, "isPremium"), false);
+  assert.equal(user.isPremium, false);
+  assert.deepEqual(calls, [true, false]);
+});
+
+test("Premium override rejects non-configurable and throwing user transactions", () => {
+  const fixed = {
+    updatePremium() { throw new Error("must not call"); }
+  };
+  Object.defineProperty(fixed, "isPremium", {
+    configurable: false,
+    enumerable: true,
+    writable: true,
+    value: false
+  });
+  const fixedOriginal = Object.getOwnPropertyDescriptor(fixed, "isPremium");
+  const fixedController = createPremiumOverride(premiumRoots(fixed), {});
+  assert.equal(fixedController.enable(), false);
+  assert.equal(fixedController.state(), "unsupported");
+  assert.deepEqual(Object.getOwnPropertyDescriptor(fixed, "isPremium"), fixedOriginal);
+
+  const throwing = {
+    updatePremium() { throw new Error("server failed"); }
+  };
+  Object.defineProperty(throwing, "isPremium", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: false
+  });
+  const throwingOriginal = Object.getOwnPropertyDescriptor(throwing, "isPremium");
+  const throwingController = createPremiumOverride(premiumRoots(throwing), {});
+  assert.equal(throwingController.enable(), false);
+  assert.equal(throwingController.state(), "unsupported");
+  assert.deepEqual(Object.getOwnPropertyDescriptor(throwing, "isPremium"), throwingOriginal);
+});
+
+test("Premium override refresh restores replaced user root and supports repeated cycles", () => {
+  const firstCalls = [];
+  const secondCalls = [];
+  const first = {
+    isPremium: false,
+    updatePremium(value) { firstCalls.push(value); }
+  };
+  const second = {
+    isPremium: false,
+    updatePremium(value) { secondCalls.push(value); }
+  };
+  const firstOriginal = Object.getOwnPropertyDescriptor(first, "isPremium");
+  const secondOriginal = Object.getOwnPropertyDescriptor(second, "isPremium");
+  const roots = premiumRoots(first);
+  const controller = createPremiumOverride(roots, {});
+
+  assert.equal(controller.enable(), true);
+  assert.equal(controller.enable(), true);
+  assert.deepEqual(firstCalls, [true]);
+  roots.user = second;
+  assert.equal(controller.refresh(), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(first, "isPremium"), firstOriginal);
+  assert.deepEqual(firstCalls, [true, false]);
+  assert.equal(second.isPremium, true);
+  assert.deepEqual(secondCalls, [true]);
+  assert.equal(controller.disable(), true);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(second, "isPremium"), secondOriginal);
+  assert.deepEqual(secondCalls, [true, false]);
+  assert.equal(controller.disable(), false);
+  assert.equal(controller.enable(), true);
+  assert.equal(controller.disable(), true);
+  assert.deepEqual(secondCalls, [true, false, true, false]);
+});
+
+test("Premium override refuses incompatible roots without mutation", () => {
+  const user = { isPremium: false, updatePremium() {} };
+  const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+  const controller = createPremiumOverride(premiumRoots(user, "1.9.0.052"), {});
+
+  assert.equal(controller.enable(), false);
+  assert.equal(controller.state(), "unsupported");
+  assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+});
+
+test("Premium override source never patches platform globals", () => {
+  const sourceDir = path.join(__dirname, "..", "src");
+  const source = fs.readdirSync(sourceDir)
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => fs.readFileSync(path.join(sourceDir, name), "utf8"))
+    .join("\n");
+  const forbiddenTargets = [
+    /JSON\.parse\s*=/,
+    /Response\.prototype\.json\s*=/,
+    /Object\.defineProperty\s*=/,
+    /Reflect\.defineProperty\s*=/,
+    /window\.Function\s*=/,
+    /Object\.defineProperty\s*\(\s*JSON\s*,\s*["']parse["']/,
+    /Object\.defineProperty\s*\(\s*Response\.prototype\s*,\s*["']json["']/,
+    /Object\.defineProperty\s*\(\s*Object\s*,\s*["']defineProperty["']/,
+    /Object\.defineProperty\s*\(\s*Reflect\s*,\s*["']defineProperty["']/,
+    /Object\.defineProperty\s*\(\s*window\s*,\s*["']Function["']/
+  ];
+
+  for (const pattern of forbiddenTargets) {
+    assert.equal(pattern.test(source), false, `forbidden platform patch: ${pattern}`);
+  }
+});
 
 test("finds exactly one semantic ISH prototype method without invoking it", () => {
   let candidateCalled = false;

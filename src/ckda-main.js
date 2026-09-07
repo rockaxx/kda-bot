@@ -19,6 +19,142 @@
     return String(value || "").replace(/^n/, "");
   }
 
+  function createPremiumOverride(roots, documentRef) {
+    let requested = false;
+    let activeRecord = null;
+
+    // Kept in the public signature for callers that provide the page document.
+    void documentRef;
+
+    function currentUser() {
+      try {
+        return roots && roots.user;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function compatibleRoots() {
+      try {
+        return normalizedClientVersion(roots && roots.version) === CLIENT_VERSION;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function restoreProperty(record) {
+      try {
+        if (record.descriptor) {
+          Object.defineProperty(record.user, "isPremium", record.descriptor);
+        } else if (!delete record.user.isPremium) {
+          return false;
+        }
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function restorePremium(record) {
+      if (typeof record.originalBoolean !== "boolean") return true;
+      try {
+        Reflect.apply(record.updatePremium, record.user, [record.originalBoolean]);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function install(user) {
+      if (
+        !compatibleRoots() ||
+        !user ||
+        (typeof user !== "object" && typeof user !== "function")
+      ) {
+        return null;
+      }
+
+      let descriptor;
+      let updatePremium;
+      let originalValue;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(user, "isPremium");
+        if (descriptor && descriptor.configurable !== true) return null;
+        updatePremium = user.updatePremium;
+        if (typeof updatePremium !== "function") return null;
+        originalValue = user.isPremium;
+      } catch (_) {
+        return null;
+      }
+
+      const record = {
+        descriptor,
+        originalBoolean: typeof originalValue === "boolean" ? originalValue : null,
+        updatePremium,
+        user,
+        lastServerWrite: undefined
+      };
+      try {
+        Object.defineProperty(user, "isPremium", {
+          configurable: true,
+          enumerable: descriptor ? descriptor.enumerable : true,
+          get() { return true; },
+          set(value) { record.lastServerWrite = value; }
+        });
+        Reflect.apply(updatePremium, user, [true]);
+        return record;
+      } catch (_) {
+        restoreProperty(record);
+        return null;
+      }
+    }
+
+    function deactivate(record) {
+      const propertyRestored = restoreProperty(record);
+      if (!propertyRestored) return false;
+      restorePremium(record);
+      return true;
+    }
+
+    function state() {
+      if (activeRecord) return requested ? "active" : "unsupported";
+      return requested ? "unsupported" : "inactive";
+    }
+
+    function enable() {
+      requested = true;
+      if (activeRecord) {
+        return activeRecord.user === currentUser() ? true : refresh();
+      }
+      activeRecord = install(currentUser());
+      return Boolean(activeRecord);
+    }
+
+    function disable() {
+      requested = false;
+      if (!activeRecord) return false;
+      const record = activeRecord;
+      if (!deactivate(record)) return false;
+      activeRecord = null;
+      return true;
+    }
+
+    function refresh() {
+      const user = currentUser();
+      if (activeRecord && activeRecord.user !== user) {
+        const record = activeRecord;
+        if (!deactivate(record)) return false;
+        activeRecord = null;
+      }
+      if (!requested) return false;
+      if (activeRecord) return true;
+      activeRecord = install(user);
+      return Boolean(activeRecord);
+    }
+
+    return { enable, disable, refresh, state };
+  }
+
   function validCooldownEndpoint(value) {
     return Number.isFinite(value) && value >= 0 ? value : null;
   }
@@ -296,6 +432,7 @@
   }
 
   return {
+    createPremiumOverride,
     createCkdaSnapshot,
     findUniquePrototypeMethod,
     installEffectHooks,
