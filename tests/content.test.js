@@ -119,6 +119,23 @@ function playerSnapshot(timestamp = 1000) {
   }] };
 }
 
+test("stale manifest dependency set exits without an uncaught startup error", () => {
+  const window = eventTarget();
+  window.__SA_BOT_ISOLATED_V1__ = {
+    createBridge() {
+      return { start() {}, stop() {} };
+    }
+  };
+  const chrome = { storage: { local: {} } };
+
+  assert.doesNotThrow(() => {
+    vm.runInNewContext(
+      fs.readFileSync(path.join(__dirname, "../src/content.js"), "utf8"),
+      { window, chrome }
+    );
+  });
+});
+
 test("C-KDA watchdog clears silent publisher data at 2000 ms and recovers without BOT restart", () => {
   const app = setup();
   app.snapshot(playerSnapshot());
