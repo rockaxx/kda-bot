@@ -10,12 +10,7 @@
   "use strict";
 
   const MAX_CKDA_PAYLOAD_BYTES = dependency.CKDA_MAX_ENVELOPE_BYTES;
-  const COMMAND_TYPES = new Set([
-    "set-premium",
-    "configure-effects",
-    "clear",
-    "refresh"
-  ]);
+  const COMMAND_TYPES = new Set(dependency.CKDA_COMMAND_TYPES);
 
   function serializedSize(value) {
     try {

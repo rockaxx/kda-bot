@@ -3,6 +3,10 @@
   if (!root || !root.__SA_BOT_ISOLATED_V1__ || typeof chrome !== "object" || !chrome.storage) return;
 
   const api = root.__SA_BOT_ISOLATED_V1__;
+  const CKDA_LEASE_RENEW_MS = 15000;
+  const CKDA_UI_STALE_MS = 2000;
+  const ckdaNow = api.createMonotonicEpochClock(root.performance);
+  let leaseTimer = null;
   let pendingSnapshot = null;
   let pendingDiagnostic = null;
   let pendingSource = null;
@@ -40,12 +44,33 @@
   function unload() {
     if (unloaded) return;
     unloaded = true;
+    if (leaseTimer !== null) root.clearInterval(leaseTimer);
+    leaseTimer = null;
+    try { ckdaBridge.sendCommand("teardown"); } catch (_) { /* MAIN lease also expires without renewal. */ }
     cleanup();
     root.removeEventListener("pagehide", unload);
     root.removeEventListener("beforeunload", unload);
   }
   root.addEventListener("beforeunload", unload);
   root.addEventListener("pagehide", unload);
+  function renewLease() {
+    if (unloaded) return;
+    let contextValid = false;
+    try { contextValid = Boolean(chrome.runtime?.id); } catch (_) { /* Invalid extension context. */ }
+    if (!contextValid) { unload(); return; }
+    try {
+      ckdaBridge.sendCommand("renew-lease");
+    } catch (_) {
+      // A C-KDA transport fault must not end the independent BOT runtime.
+      if (leaseTimer !== null) root.clearInterval(leaseTimer);
+      leaseTimer = null;
+      ckdaStartupFailed = true;
+      receiveCkdaResult({ state: "error" });
+    }
+  }
+  leaseTimer = root.setInterval(renewLease, CKDA_LEASE_RENEW_MS);
+  renewLease();
+  if (unloaded) return;
 
   api.whenDocumentReady(document, () => {
     chrome.storage.local.get(["settings", "ckdaSettings"], (stored = {}) => {
@@ -63,10 +88,11 @@
     // Source compatibility is a page-lifetime gate, independent of transient UI failures.
     let ckdaSourceUnsupported = false;
     let ckdaSnapshot = null;
+    let lastCkdaSnapshotAt = null;
     let ckdaStatus = { state: ckdaStartupFailed ? "error" : "waiting-for-game" };
     let ckdaCanvas = null;
     try {
-      ckdaCanvas = api.createCkdaCanvas({ documentRef: document, windowRef: root });
+      ckdaCanvas = api.createCkdaCanvas({ documentRef: document, windowRef: root, now: ckdaNow });
     } catch (_) {
       ckdaStatus = { state: "error" };
     }
@@ -112,6 +138,7 @@
 
     function clearCkda() {
       ckdaSnapshot = null;
+      lastCkdaSnapshotAt = null;
       ckdaCanvas?.clear();
       if (!["error", "save-failed", "unsupported-client"].includes(ckdaStatus.state)) {
         ckdaStatus = { state: "waiting-for-game" };
@@ -252,7 +279,15 @@
       if (ckdaSourceUnsupported) return;
       const checked = api.validateCkdaSnapshot(value);
       if (!checked.ok) return;
+      const timestamp = ckdaNow();
+      if (!Number.isFinite(timestamp) || checked.value.timestamp > timestamp ||
+          timestamp - checked.value.timestamp >= CKDA_UI_STALE_MS) return;
+      if (checked.value.connectionState !== "connected") {
+        clearCkda();
+        return;
+      }
       ckdaSnapshot = checked.value;
+      lastCkdaSnapshotAt = timestamp;
       if (!["error", "save-failed", "unsupported-client"].includes(ckdaStatus.state)) {
         ckdaStatus = { state: ckdaSnapshot.players.length ? "ready" : "no-player-data" };
       }
@@ -276,7 +311,12 @@
     render();
     document.addEventListener("visibilitychange", visibilityChanged);
     ckdaAction(configureCkda);
+    const watchdogTimer = root.setInterval(() => {
+      if (unloaded || lastCkdaSnapshotAt === null) return;
+      if (ckdaNow() - lastCkdaSnapshotAt >= CKDA_UI_STALE_MS) ckdaAction(clearCkda);
+    }, 250);
     cleanup = () => {
+      root.clearInterval(watchdogTimer);
       document.removeEventListener("visibilitychange", visibilityChanged);
       for (const release of [
         () => runtime.destroy(), removeEmergencyStop, () => bridge.stop(),

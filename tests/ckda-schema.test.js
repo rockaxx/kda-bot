@@ -118,7 +118,7 @@ test("allows every documented C-KDA direction and cooldown endpoint", () => {
     assert.equal(validateCkdaEnvelope({
       channel: CKDA_CHANNEL,
       direction,
-      payload: { type: "clear", extra: true }
+      payload: { requestId: 1, type: "clear" }
     }).ok, true);
   }
 
@@ -133,4 +133,15 @@ test("allows every documented C-KDA direction and cooldown endpoint", () => {
     }]
   };
   assert.equal(validateCkdaSnapshot(snapshot).ok, true);
+});
+
+test("C-KDA command schema strictly allows teardown and renew-lease without action fields", () => {
+  for (const type of ["teardown", "renew-lease"]) {
+    const envelope = { channel: CKDA_CHANNEL, direction: "command", payload: { requestId: 1, type } };
+    assert.equal(validateCkdaEnvelope(envelope).ok, true);
+    for (const payload of [
+      { requestId: 1, type, targetId: 8 }, { requestId: 0, type }, { type },
+      { requestId: 1, type: "attack" }
+    ]) assert.equal(validateCkdaEnvelope({ ...envelope, payload }).ok, false);
+  }
 });

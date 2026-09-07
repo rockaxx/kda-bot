@@ -4,8 +4,39 @@ const {
   classifyPlayer,
   projectPlayer,
   filterVisiblePlayers,
-  createCooldownRegistry
+  createCooldownRegistry,
+  createMonotonicEpochClock
 } = require("../src/ckda-core.js");
+
+test("shared monotonic epoch clock uses performance delta despite wall-clock jumps", () => {
+  assert.equal(typeof createMonotonicEpochClock, "function");
+  let elapsed = 0;
+  let wall = 1_700_000_000_000;
+  const performanceRef = { timeOrigin: 1_700_000_000_000, now() { return elapsed; } };
+  const mainNow = createMonotonicEpochClock(performanceRef, () => wall);
+  const isolatedNow = createMonotonicEpochClock(performanceRef, () => wall);
+  const cooldowns = createCooldownRegistry(mainNow);
+  assert.equal(cooldowns.activate("emp", 7, 1000), 1_700_000_001_000);
+  wall -= 60_000;
+  elapsed = 250;
+  assert.equal(mainNow(), 1_700_000_000_250);
+  assert.equal(isolatedNow(), mainNow());
+  wall += 120_000;
+  elapsed = 999;
+  assert.equal(cooldowns.read(7).empEndsAt, 1_700_000_001_000);
+  elapsed = 1000;
+  assert.equal(cooldowns.read(7).empEndsAt, null);
+});
+
+test("shared monotonic epoch fallback clamps backward wall-clock movement", () => {
+  assert.equal(typeof createMonotonicEpochClock, "function");
+  let wall = 1000;
+  const now = createMonotonicEpochClock(null, () => wall);
+  wall = 900;
+  assert.equal(now(), 1000);
+  wall = 1200;
+  assert.equal(now(), 1200);
+});
 
 function playerRoots() {
   const ship = { ID: 77, clanId: 99 };

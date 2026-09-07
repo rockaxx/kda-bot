@@ -18,6 +18,12 @@
   const DIRECTIONS = new Set(["snapshot", "command", "result", "lifecycle"]);
   const RELATIONS = new Set(["ally", "enemy"]);
   const PREMIUM_STATES = new Set(["inactive", "active", "unsupported"]);
+  const COMMAND_FIELDS = Object.freeze({
+    "set-premium": ["enabled"],
+    "configure-effects": ["empCooldownMs", "ishCooldownMs"],
+    clear: [], refresh: [], teardown: [], "renew-lease": []
+  });
+  const CKDA_COMMAND_TYPES = Object.freeze(Object.keys(COMMAND_FIELDS));
 
   function isPlainObject(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -147,6 +153,27 @@
       errors.push("payload must be an object");
     } else {
       payload = { ...value.payload };
+      if (value.direction === "command") {
+        const fields = COMMAND_FIELDS[payload.type];
+        if (!Object.hasOwn(COMMAND_FIELDS, payload.type)) {
+          errors.push("command type is invalid");
+        } else {
+          const allowed = ["requestId", "type", ...fields];
+          if (Object.keys(payload).length !== allowed.length ||
+              Object.keys(payload).some(key => !allowed.includes(key))) {
+            errors.push("command fields are invalid");
+          }
+          if (payload.type === "set-premium" && typeof payload.enabled !== "boolean") {
+            errors.push("enabled is invalid");
+          }
+          if (payload.type === "configure-effects" && fields.some(key =>
+            !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000
+          )) errors.push("effect duration is invalid");
+        }
+        if (!Number.isSafeInteger(payload.requestId) || payload.requestId < 1) {
+          errors.push("requestId is invalid");
+        }
+      }
     }
 
     if (errors.length) return { ok: false, errors };
@@ -159,6 +186,7 @@
 
   return {
     CKDA_CHANNEL,
+    CKDA_COMMAND_TYPES,
     CKDA_MAX_ENVELOPE_BYTES,
     isPlainObject,
     validateCkdaEnvelope,

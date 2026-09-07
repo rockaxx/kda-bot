@@ -7,6 +7,15 @@
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
 
+  function createMonotonicEpochClock(performanceRef, dateNow = Date.now) {
+    if (performanceRef && Number.isFinite(performanceRef.timeOrigin) &&
+        typeof performanceRef.now === "function") {
+      return () => performanceRef.timeOrigin + performanceRef.now();
+    }
+    let last = Number(dateNow());
+    return () => (last = Math.max(last, Number(dateNow())));
+  }
+
   function isCanonicalId(value) {
     return (
       (typeof value === "string" && value.length > 0) ||
@@ -193,6 +202,7 @@
   }
 
   return {
+    createMonotonicEpochClock,
     classifyPlayer,
     projectPlayer,
     filterVisiblePlayers,

@@ -7,7 +7,7 @@
   "web_accessible_resources": [
     {
       "resources": ["assets/c-kda.gif"],
-      "matches": ["https://steam.space-aces.com/gameNew*"]
+      "matches": ["https://steam.space-aces.com/*"]
     }
   ],
   "content_scripts": [

@@ -18,6 +18,8 @@
   const CLIENT_VERSION = "1.9.0.051";
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
   const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
+  const LEASE_DURATION_MS = 120000;
+  const LEASE_CHECK_MS = 5000;
 
   function normalizedClientVersion(value) {
     return String(value || "").replace(/^n/, "");
@@ -94,6 +96,7 @@
       const record = {
         cleanupFailed: false,
         descriptor,
+        originalValue,
         originalBoolean: typeof originalValue === "boolean" ? originalValue : null,
         updatePremium,
         user,
@@ -109,20 +112,33 @@
         Reflect.apply(updatePremium, user, [true]);
         return record;
       } catch (_) {
-        restoreProperty(record);
-        return null;
+        // An updater may mutate presentation before throwing. Keep failed cleanup
+        // recoverable by disable/refresh, including a failure during installation.
+        return deactivate(record) ? null : record;
+      }
+    }
+
+    function restorationMatches(record) {
+      try {
+        const actual = Object.getOwnPropertyDescriptor(record.user, "isPremium");
+        const descriptorMatches = record.descriptor
+          ? actual && Object.keys(record.descriptor).every(key =>
+            Object.is(actual[key], record.descriptor[key])) &&
+            Object.keys(actual).length === Object.keys(record.descriptor).length
+          : actual === undefined;
+        return Boolean(descriptorMatches) && Object.is(record.user.isPremium, record.originalValue);
+      } catch (_) {
+        return false;
       }
     }
 
     function deactivate(record) {
       const propertyRestored = restoreProperty(record);
-      if (!propertyRestored) {
-        record.cleanupFailed = true;
-        return false;
-      }
       const premiumRestored = restorePremium(record);
       const descriptorReapplied = restoreProperty(record);
-      record.cleanupFailed = !premiumRestored || !descriptorReapplied;
+      const effectiveStateRestored = restorationMatches(record);
+      record.cleanupFailed = !propertyRestored || !premiumRestored ||
+        !descriptorReapplied || !effectiveStateRestored;
       return !record.cleanupFailed;
     }
 
@@ -141,7 +157,7 @@
           : refresh();
       }
       activeRecord = install(currentUser());
-      return Boolean(activeRecord);
+      return Boolean(activeRecord && !activeRecord.cleanupFailed);
     }
 
     function disable() {
@@ -163,7 +179,7 @@
       if (!requested) return false;
       if (activeRecord) return true;
       activeRecord = install(user);
-      return Boolean(activeRecord);
+      return Boolean(activeRecord && !activeRecord.cleanupFailed);
     }
 
     return { enable, disable, refresh, state };
@@ -386,7 +402,8 @@
   }
 
   function startCkdaPublisher(windowRef, roots, options = {}) {
-    const now = typeof options.now === "function" ? options.now : Date.now;
+    const now = typeof options.now === "function" ? options.now :
+      dependency.createMonotonicEpochClock(windowRef && windowRef.performance);
     const cooldowns =
       options.cooldowns &&
       typeof options.cooldowns.read === "function" &&
@@ -400,6 +417,24 @@
     let timer = null;
     let lastWorld = roots && roots.world;
     let lastMapId = Number(lastWorld && lastWorld.mapId);
+    let playerCursor = 0;
+    let lastPublished = null;
+
+    function clear() {
+      playerCursor = 0;
+      cooldowns.clearAll();
+      const previous = lastPublished;
+      lastPublished = null;
+      if (previous && !stopped) {
+        // Reuse the disconnected snapshot contract to invalidate retained
+        // observations, including a world replacement that keeps the same map ID.
+        windowRef.postMessage({
+          channel: dependency.CKDA_CHANNEL,
+          direction: "snapshot",
+          payload: { ...previous, timestamp: now(), connectionState: "disconnected", players: [] }
+        }, "*");
+      }
+    }
 
     function refresh() {
       if (stopped) return null;
@@ -408,29 +443,40 @@
         const world = roots && roots.world;
         const mapId = Number(world && world.mapId);
         if (world !== lastWorld || !Object.is(mapId, lastMapId) || roots?.network?.connected !== true) {
-          cooldowns.clearAll();
+          clear();
           lastWorld = world;
           lastMapId = mapId;
         }
         const snapshot = createCkdaSnapshot(roots, cooldowns, premiumState(), now());
         if (!snapshot || !windowRef || typeof windowRef.postMessage !== "function") {
+          clear();
           return null;
         }
         const payload = { ...snapshot, players: [] };
         const envelope = { channel: dependency.CKDA_CHANNEL, direction: "snapshot", payload };
         const encoder = new TextEncoder();
         let bytes = encoder.encode(JSON.stringify(envelope)).byteLength;
-        // Preserve a deterministic prefix within the receiver's complete-envelope budget.
-        for (const player of snapshot.players) {
+        const count = snapshot.players.length;
+        const start = count ? playerCursor % count : 0;
+        let considered = 0;
+        for (; considered < count; considered += 1) {
+          const player = snapshot.players[(start + considered) % count];
           const addedBytes = encoder.encode(JSON.stringify(player)).byteLength + (payload.players.length ? 1 : 0);
-          if (bytes + addedBytes > dependency.CKDA_MAX_ENVELOPE_BYTES) break;
+          if (bytes + addedBytes > dependency.CKDA_MAX_ENVELOPE_BYTES) {
+            // An individually oversized record cannot block later records. When
+            // this batch is full, resume with its first unsent record next time.
+            if (payload.players.length) break;
+            continue;
+          }
           payload.players.push(player);
           bytes += addedBytes;
         }
+        playerCursor = count ? (start + considered) % count : 0;
         windowRef.postMessage(envelope, "*");
+        lastPublished = { ...payload, players: [] };
         return payload;
       } catch (_) {
-        cooldowns.clearAll();
+        try { clear(); } catch (_) { /* A disconnected consumer may reject the reset message. */ }
         return null;
       }
     }
@@ -443,6 +489,7 @@
     function stop() {
       if (stopped) return false;
       stopped = true;
+      clear();
       if (
         timer !== null &&
         windowRef &&
@@ -453,7 +500,7 @@
       return true;
     }
 
-    return { stop, refresh };
+    return { stop, refresh, clear };
   }
 
   function validatedCommand(event, windowRef) {
@@ -462,31 +509,21 @@
       if (new TextEncoder().encode(JSON.stringify(event.data)).byteLength > dependency.CKDA_MAX_ENVELOPE_BYTES) return null;
       const envelope = dependency.validateCkdaEnvelope(event.data, "command");
       if (!envelope.ok) return null;
-      const value = envelope.value.payload;
-      if (!Number.isSafeInteger(value.requestId) || value.requestId < 1) return null;
-      const fields = {
-        "set-premium": ["enabled"],
-        "configure-effects": ["empCooldownMs", "ishCooldownMs"],
-        clear: [], refresh: []
-      };
-      if (!Object.prototype.hasOwnProperty.call(fields, value.type)) return null;
-      const allowed = ["requestId", "type", ...fields[value.type]];
-      if (Object.keys(value).length !== allowed.length || Object.keys(value).some(key => !allowed.includes(key))) return null;
-      if (value.type === "set-premium" && typeof value.enabled !== "boolean") return null;
-      if (value.type === "configure-effects" && fields[value.type].some(key =>
-        !Number.isFinite(value[key]) || value[key] < 1000 || value[key] > 120000
-      )) return null;
-      return value;
+      return envelope.value.payload;
     } catch (_) {
       return null;
     }
   }
 
-  function installCkda(windowRef) {
+  function installCkda(windowRef, options = {}) {
     if (!windowRef || typeof windowRef.addEventListener !== "function") return null;
     if (windowRef[INSTALLATION_MARK]) return windowRef[INSTALLATION_MARK];
+    const now = typeof options.now === "function" ? options.now :
+      dependency.createMonotonicEpochClock(windowRef.performance);
     let stopped = false;
     let pollTimer = null;
+    let leaseTimer = null;
+    let leaseDeadline = now() + LEASE_DURATION_MS;
     let publisher = null;
     let cooldowns = null;
     let premium = null;
@@ -512,6 +549,11 @@
       if (stopped) return;
       const command = validatedCommand(event, windowRef);
       if (!command) return;
+      if (command.type === "teardown") { cleanup(); return; }
+      if (command.type === "renew-lease") {
+        leaseDeadline = now() + LEASE_DURATION_MS;
+        return;
+      }
       if (!publisher) { tryInstall(); return; }
       try {
         if (command.type === "set-premium") {
@@ -521,7 +563,7 @@
           effects = { empCooldownMs: command.empCooldownMs, ishCooldownMs: command.ishCooldownMs };
           updateHooks(true);
         } else if (command.type === "clear") {
-          cooldowns.clearAll();
+          publisher.clear();
         }
         publisher.refresh();
       } catch (_) {
@@ -533,6 +575,9 @@
       if (stopped) return false;
       stopped = true;
       if (pollTimer !== null) windowRef.clearInterval(pollTimer);
+      if (leaseTimer !== null) windowRef.clearInterval(leaseTimer);
+      pollTimer = null;
+      leaseTimer = null;
       windowRef.removeEventListener("message", handleMessage);
       windowRef.removeEventListener("pagehide", cleanup);
       windowRef.removeEventListener("beforeunload", cleanup);
@@ -542,6 +587,7 @@
       ]) {
         try { release(); } catch (_) { /* Release the remaining independent resources. */ }
       }
+      if (windowRef[INSTALLATION_MARK] === installation) delete windowRef[INSTALLATION_MARK];
       return true;
     }
 
@@ -555,9 +601,10 @@
           return;
         }
         roots = candidate;
-        cooldowns = dependency.createCooldownRegistry(Date.now);
+        cooldowns = dependency.createCooldownRegistry(now);
         premium = createPremiumOverride(roots, windowRef.document);
         publisher = startCkdaPublisher(windowRef, roots, {
+          now,
           cooldowns,
           premiumState: () => premium.state(),
           beforeSnapshot() { updateHooks(); premium.refresh(); }
@@ -577,6 +624,9 @@
     windowRef.addEventListener("message", handleMessage);
     windowRef.addEventListener("pagehide", cleanup);
     windowRef.addEventListener("beforeunload", cleanup);
+    leaseTimer = windowRef.setInterval(() => {
+      if (!stopped && now() >= leaseDeadline) cleanup();
+    }, LEASE_CHECK_MS);
     tryInstall();
     if (!publisher && !stopped) pollTimer = windowRef.setInterval(tryInstall, 100);
     return installation;

@@ -98,3 +98,15 @@ test("sends only numbered C-KDA configuration commands and destroys listener", (
   bridge.destroy();
   assert.equal(windowRef.listenerCount(), 0);
 });
+
+test("bridge sends numbered renew-lease and teardown commands without player actions", () => {
+  const windowRef = createWindow();
+  const bridge = createCkdaBridge({ windowRef });
+  assert.doesNotThrow(() => bridge.sendCommand("renew-lease"));
+  assert.doesNotThrow(() => bridge.sendCommand("teardown"));
+  assert.deepEqual(windowRef.sent.map(value => value.message.payload), [
+    { requestId: 1, type: "renew-lease" }, { requestId: 2, type: "teardown" }
+  ]);
+  assert.throws(() => bridge.sendCommand("attack", { targetId: 8 }), TypeError);
+  bridge.destroy();
+});

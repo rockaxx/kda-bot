@@ -20,6 +20,12 @@ function eventTarget() {
 
 function setup(stored = {}, deferred = false, failBridge = false, storageSet = () => Promise.resolve()) {
   const window = eventTarget();
+  const timers = new Map();
+  let nextTimer = 0;
+  let elapsed = 0;
+  window.performance = { timeOrigin: 1000, now: () => elapsed };
+  window.setInterval = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearInterval = id => timers.delete(id);
   const document = { ...eventTarget(), visibilityState: "visible" };
   const calls = { commands: [], saves: [], canvas: [], botSnapshots: [], destroyed: [], starts: 0, stops: 0 };
   let options;
@@ -28,6 +34,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   let storageCallback;
   let model;
   let canvasThrows = false;
+  let failingCommand = null;
   const runtime = {
     getState: () => ({ state: "idle" }), isActive: () => false,
     start() { calls.starts++; }, stop() { calls.stops++; },
@@ -37,6 +44,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   window.__SA_BOT_ISOLATED_V1__ = {
     ...require("../src/settings.js"), ...require("../src/ckda-settings.js"),
     ...require("../src/ckda-schema.js"),
+    ...require("../src/ckda-core.js"),
     whenDocumentReady(_document, callback) { callback(); },
     createController: () => ({ getState: runtime.getState }),
     createLogger: () => ({ add() {}, list: () => [] }),
@@ -51,11 +59,15 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
       if (failBridge) throw new Error("C-KDA bridge failed");
       ckdaBridge = value;
       return {
-        sendCommand(type, payload) { calls.commands.push({ type, payload }); },
+        sendCommand(type, payload) {
+          if (type === failingCommand) throw new Error("C-KDA send failed");
+          calls.commands.push({ type, payload });
+        },
         destroy() { calls.destroyed.push("ckda-bridge"); }
       };
     },
-    createCkdaCanvas() {
+    createCkdaCanvas(value) {
+      calls.canvasOptions = value;
       return {
         render(snapshot, settings) {
           if (canvasThrows) throw new Error("canvas failed");
@@ -74,15 +86,18 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
     },
     installEmergencyStop: () => () => calls.destroyed.push("shortcut")
   };
-  const chrome = { storage: { local: {
+  const chrome = { runtime: { id: "test-extension" }, storage: { local: {
     get(keys, callback) { calls.keys = keys; storageCallback = callback; if (!deferred) callback(stored); },
     set(value) { calls.saves.push(value); return storageSet(value); }
   } } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../src/content.js"), "utf8"), {
-    window, document, chrome, TextEncoder
+    window, document, chrome, TextEncoder, Date
   });
   return {
-    window, document, calls, options: () => options, model: () => model,
+    window, document, chrome, calls, timers, options: () => options, model: () => model,
+    tick(delay) { for (const timer of [...timers.values()]) if (delay === undefined || timer.delay === delay) timer.callback(); },
+    setNow(value) { elapsed = value - 1000; },
+    failCommand(type) { failingCommand = type; },
     snapshot(value) { ckdaBridge?.onSnapshot(value); },
     result(value) { ckdaBridge?.onResult(value); },
     botSnapshot(value) { botBridge.onSnapshot(value); },
@@ -92,17 +107,118 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   };
 }
 
-function snapshot() {
-  return { timestamp: 1000, clientVersion: "1.9.0.051", connectionState: "connected",
+function snapshot(timestamp = 1000) {
+  return { timestamp, clientVersion: "1.9.0.051", connectionState: "connected",
     mapId: 17, premiumState: "inactive", players: [] };
 }
+
+function playerSnapshot(timestamp = 1000) {
+  return { ...snapshot(timestamp), players: [{
+    id: 8, screenX: 100, screenY: 100, relation: "enemy", cloaked: true,
+    observedAt: timestamp, empEndsAt: null, ishEndsAt: null
+  }] };
+}
+
+test("C-KDA watchdog clears silent publisher data at 2000 ms and recovers without BOT restart", () => {
+  const app = setup();
+  app.snapshot(playerSnapshot());
+  assert.equal(app.model().ckdaStatus.state, "ready");
+  assert.equal(app.model().ckdaSnapshot.players.length, 1);
+  app.setNow(2999);
+  app.tick(250);
+  assert.equal(app.model().ckdaStatus.state, "ready");
+  app.setNow(3000);
+  app.tick(250);
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+  assert.equal(app.calls.statusText, "Waiting for game");
+  app.snapshot(playerSnapshot(3000));
+  assert.equal(app.model().ckdaStatus.state, "ready");
+  app.snapshot(snapshot(3000));
+  assert.equal(app.model().ckdaStatus.state, "no-player-data");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("C-KDA watchdog and canvas share performance epoch time through backward and forward Date jumps", (t) => {
+  let wall = 1000;
+  t.mock.method(Date, "now", () => wall);
+  const app = setup();
+  app.snapshot(playerSnapshot());
+  wall += 60000;
+  app.setNow(1500);
+  app.tick(250);
+  assert.equal(app.model().ckdaStatus.state, "ready");
+  wall -= 120000;
+  app.setNow(3000);
+  app.tick(250);
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.equal(app.calls.statusText, "Waiting for game");
+  assert.equal(typeof app.calls.canvasOptions.now, "function");
+  assert.equal(app.calls.canvasOptions.now(), 3000);
+});
+
+test("malformed, stale, and future C-KDA snapshots cannot renew UI readiness", () => {
+  const app = setup();
+  app.snapshot(playerSnapshot());
+  const previous = app.model().ckdaSnapshot;
+  app.setNow(2999);
+  app.snapshot({ ...playerSnapshot(2999), mapId: -1 });
+  app.snapshot(playerSnapshot(0));
+  app.snapshot(playerSnapshot(4000));
+  assert.equal(app.model().ckdaSnapshot, previous);
+  app.setNow(3000);
+  app.tick(250);
+  assert.equal(app.model().ckdaSnapshot, null);
+  app.snapshot(playerSnapshot(1000));
+  assert.equal(app.calls.statusText, "Waiting for game");
+});
+
+test("disconnected C-KDA snapshot clears UI and canvas immediately, then fresh connection recovers", () => {
+  const app = setup();
+  app.snapshot(playerSnapshot());
+  app.snapshot({ ...playerSnapshot(), connectionState: "disconnected" });
+  assert.equal(app.model().ckdaSnapshot, null);
+  assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+  assert.equal(app.calls.statusText, "Waiting for game");
+  app.setNow(3000);
+  app.tick(250);
+  app.snapshot(playerSnapshot(3000));
+  assert.equal(app.model().ckdaStatus.state, "ready");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+for (const state of ["unsupported-client", "error", "save-failed"]) {
+  test(`C-KDA silence clears data while preserving higher-priority ${state} status`, async () => {
+    const app = setup({}, false, false, () => Promise.reject(new Error("storage unavailable")));
+    app.snapshot(playerSnapshot());
+    if (state === "save-failed") await app.options().onSaveCkda({ sizePx: 11 });
+    else app.result({ state });
+    app.setNow(3000);
+    app.tick(250);
+    assert.equal(app.model().ckdaSnapshot, null);
+    assert.equal(app.model().ckdaStatus.state, state);
+    app.window.emit("pagehide");
+    assert.equal(app.timers.size, 0);
+  });
+}
+
+test("C-KDA lease send failure reports an error without releasing BOT resources", () => {
+  const app = setup();
+  app.failCommand("renew-lease");
+  app.tick(15000);
+  assert.equal(app.model().ckdaStatus.state, "error");
+  assert.equal(app.calls.destroyed.includes("runtime"), false);
+  assert.equal(app.calls.destroyed.includes("bridge"), false);
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+  app.window.emit("pagehide");
+});
 
 test("content loads independent C-KDA defaults and initializes MAIN settings", () => {
   const app = setup();
   assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings"]);
   assert.equal(app.model().ckdaSettings.empCooldownMs, 28000);
   assert.equal(app.model().ckdaSettings.premiumOverride, false);
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "refresh"]);
 });
 
 test("C-KDA saves normalized settings and updates canvas and Premium independently", async () => {
@@ -178,12 +294,40 @@ test("pagehide cleanup is idempotent and detaches visibility recovery", () => {
   assert.equal(app.document.count("visibilitychange"), 0);
 });
 
+test("isolated content renews its lease every 15000 ms and sends teardown before releasing its bridge", () => {
+  const app = setup();
+  assert.equal(app.calls.commands[0].type, "renew-lease");
+  assert.ok([...app.timers.values()].some(timer => timer.delay === 15000));
+  app.calls.commands.length = 0;
+  app.tick(15000);
+  assert.deepEqual(app.calls.commands.map(command => command.type), ["renew-lease"]);
+  app.window.emit("pagehide");
+  assert.equal(app.calls.commands.at(-1).type, "teardown");
+  assert.equal(app.calls.commands.filter(command => command.type === "teardown").length, 1);
+  assert.equal(app.timers.size, 0);
+  app.tick();
+  app.window.emit("beforeunload");
+  assert.equal(app.calls.commands.at(-1).type, "teardown");
+});
+
+test("isolated context invalidation stops lease renewal and sends teardown independently of BOT state", () => {
+  const app = setup();
+  app.chrome.runtime.id = undefined;
+  app.tick(15000);
+  assert.equal(app.calls.commands.at(-1).type, "teardown");
+  assert.equal(app.timers.size, 0);
+  assert.ok(app.calls.destroyed.includes("ckda-bridge"));
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
 test("pagehide before storage returns prevents late UI and runtime creation", () => {
   const app = setup({}, true);
   app.window.emit("pagehide");
   app.load();
   assert.equal(app.options(), undefined);
   assert.deepEqual(app.calls.destroyed.sort(), ["bridge", "ckda-bridge"]);
+  assert.equal(app.calls.commands.at(-1)?.type, "teardown");
+  assert.equal(app.timers.size, 0);
 });
 
 test("late MAIN readiness resends persisted C-KDA configuration without BOT lifecycle changes", () => {
@@ -286,7 +430,8 @@ test("C-KDA save waits for storage completion and ignores completion after pageh
   app.window.emit("pagehide");
   completeSave();
   assert.equal(await saved, false);
-  assert.equal(app.calls.commands.length, commandCount);
+  assert.equal(app.calls.commands.length, commandCount + 1);
+  assert.equal(app.calls.commands.at(-1).type, "teardown");
 });
 
 for (const failure of ["save-failed", "error"]) {

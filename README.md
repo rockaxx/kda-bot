@@ -11,7 +11,9 @@ feeds players into BOT targeting or actions.
 
 ## Current safety boundary
 
-- Scope is only `https://steam.space-aces.com/gameNew*`.
+- Both content scripts run only on `https://steam.space-aces.com/gameNew*`.
+  The bundled GIF uses Chrome's required origin-scoped web-resource match
+  `https://steam.space-aces.com/*`.
 - Chrome permissions: only `storage`; no cookie, request, tab, or broad host
   access.
 - Unknown or structurally changed client builds remain unmodified and cannot
@@ -41,10 +43,33 @@ client-local Premium test override. `CLEAR MARKERS` discards the current local
 observations. EMP/ISH labels are countdowns from the observed end time, rounded
 up to whole seconds; they are not server actions or ability activation.
 
+Player batches rotate within the 4096-byte message limit. The canvas merges
+observations by player ID and removes each after 750 ms without an update.
+World/map replacement, disconnect, unsupported data, and clear reset that
+retained state. A reset uses an empty disconnected C-KDA snapshot before the
+next connected batch, including when a new world retains the same map ID.
+After 2000 ms without a valid snapshot, the UI clears its old player count and
+shows `Waiting for game`; fresh data restores the normal status. Existing
+source-unsupported and visible error states retain priority.
+
+Observations, cooldowns, and stale timers share a monotonic epoch clock based
+on `performance.timeOrigin + performance.now()`. System clock changes do not
+change those countdowns. Premium support does not control player visibility.
+
 Premium override is a reversible local presentation test only. On disable,
 page hide, navigation, or extension cleanup, C-KDA restores the original
 `isPremium` property descriptor/value and calls the original update path with
-the prior boolean value when available. It does not change server entitlement.
+the prior boolean value when available. A failed enable also rolls back the
+presentation update and restores the exact descriptor again after the callback.
+Failed restoration remains `unsupported` and is retained for a later disable
+or refresh retry. It does not change server entitlement.
+
+The isolated extension context renews a MAIN-world lease every 15 seconds and
+sends an explicit teardown during cleanup. MAIN checks the 120-second lease
+every 5 seconds; expiration restores Premium, removes effect hooks and
+listeners, stops timers, and releases the installation guard. Browser freezing
+can delay execution of cleanup until the tab runs again. Reload the game tab
+after extension reload/disable or lease expiry before starting another session.
 
 BOT remains NPC-only: C-KDA player observations cannot become planner targets,
 movement targets, or actions. In `Masked only` mode, markers depend on the

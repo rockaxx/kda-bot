@@ -143,6 +143,87 @@ test("Premium override retains unsupported cleanup state when restore update thr
   assert.deepEqual(calls, [true, false, false]);
 });
 
+for (const ownProperty of [true, false]) {
+  test(`failed Premium enable rolls back presentation and exact ${ownProperty ? "own descriptor" : "property absence"}`, () => {
+    let presentation = false;
+    const calls = [];
+    const user = Object.create({ isPremium: false });
+    if (ownProperty) Object.defineProperty(user, "isPremium", {
+      configurable: true, enumerable: false, writable: true, value: false
+    });
+    user.updatePremium = function (value) {
+      calls.push(value);
+      this.isPremium = value;
+      presentation = this.isPremium;
+      if (value) throw new Error("shop updater failed after body mutation");
+    };
+    const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+    const controller = createPremiumOverride(premiumRoots(user), {});
+
+    assert.equal(controller.enable(), false);
+    assert.equal(presentation, false, "failed enable must undo presentation side effects");
+    assert.equal(user.isPremium, false);
+    assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+    assert.deepEqual(calls, [true, false]);
+    assert.equal(controller.state(), "unsupported");
+  });
+}
+
+test("failed Premium enable retains restoration record when rollback updater fails, then disable retries", () => {
+  let presentation = false;
+  let failRollback = true;
+  const calls = [];
+  const user = {
+    isPremium: false,
+    updatePremium(value) {
+      calls.push(value);
+      this.isPremium = value;
+      if (!value && failRollback) throw new Error("rollback updater temporarily unavailable");
+      presentation = this.isPremium;
+      if (value) throw new Error("shop updater failed after body mutation");
+    }
+  };
+  const original = Object.getOwnPropertyDescriptor(user, "isPremium");
+  const controller = createPremiumOverride(premiumRoots(user), {});
+  assert.equal(controller.enable(), false);
+  assert.equal(presentation, true);
+  assert.equal(controller.state(), "unsupported");
+  assert.deepEqual(calls, [true, false]);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(user, "isPremium"), original);
+  failRollback = false;
+  assert.equal(controller.disable(), true, "pending rollback must survive failed enable");
+  assert.equal(presentation, false);
+  assert.equal(controller.state(), "inactive");
+  assert.deepEqual(calls, [true, false, false]);
+});
+
+test("failed Premium enable retains rollback when effective accessor value was not restored, then refresh retries", () => {
+  let value = false;
+  let ignoreRestore = true;
+  const user = { updatePremium(enabled) {
+    if (enabled) {
+      value = true;
+      throw new Error("shop update failed");
+    }
+    if (!ignoreRestore) value = false;
+  } };
+  Object.defineProperty(user, "isPremium", {
+    configurable: true, enumerable: true, get() { return value; }
+  });
+  const roots = premiumRoots(user);
+  const controller = createPremiumOverride(roots, {});
+  assert.equal(controller.enable(), false);
+  assert.equal(controller.state(), "unsupported");
+  roots.user = { isPremium: false, updatePremium() {} };
+  assert.equal(controller.refresh(), false, "old effective state must be restored before another user is overridden");
+  assert.equal(roots.user.isPremium, false);
+  ignoreRestore = false;
+  assert.equal(controller.refresh(), true);
+  assert.equal(value, false);
+  assert.equal(controller.state(), "active");
+  controller.disable();
+});
+
 test("Premium override refresh retains failed old-root cleanup for retry", () => {
   let failRestore = true;
   const first = {
@@ -538,22 +619,24 @@ test("publisher sends on cadence, clears cooldowns on world change, and stops", 
 
   roots.world = { ...roots.world, mapId: 18 };
   publisher.refresh();
-  assert.equal(messages.length, 4);
-  assert.deepEqual(events.slice(-2), ["clear", "post"]);
+  assert.equal(messages.length, 5);
+  assert.equal(messages[3].payload.connectionState, "disconnected");
+  assert.deepEqual(events.slice(-3), ["clear", "post", "post"]);
 
   publisher.stop();
   assert.equal(clearedTimer, 9);
   scheduled.callback();
-  assert.equal(messages.length, 4);
+  assert.equal(messages.length, 5);
 });
 
 function installerWindow(roots) {
   const listeners = new Map();
   const timers = new Map();
   const messages = [];
+  const delays = new Map();
   let timerId = 0;
   return {
-    __SA_BOT_ROOTS__: roots, document: {}, timers, messages,
+    __SA_BOT_ROOTS__: roots, document: {}, timers, delays, messages,
     addEventListener(type, fn) {
       if (!listeners.has(type)) listeners.set(type, new Set());
       listeners.get(type).add(fn);
@@ -561,8 +644,8 @@ function installerWindow(roots) {
     removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
     emit(type, value = {}) { for (const fn of [...(listeners.get(type) || [])]) fn(value); },
     count(type) { return listeners.get(type)?.size || 0; },
-    setInterval(fn) { timers.set(++timerId, fn); return timerId; },
-    clearInterval(id) { timers.delete(id); },
+    setInterval(fn, delay) { timers.set(++timerId, fn); delays.set(timerId, delay); return timerId; },
+    clearInterval(id) { timers.delete(id); delays.delete(id); },
     tick() { for (const fn of [...timers.values()]) fn(); },
     postMessage(message) { messages.push(message); },
     command(payload, overrides = {}) {
@@ -573,6 +656,95 @@ function installerWindow(roots) {
     snapshot() { return messages.filter(value => value.direction === "snapshot").at(-1)?.payload; }
   };
 }
+
+function assertInstallationReleased(windowRef, roots, original, installation) {
+  assert.equal(roots.world.addEmpNew, original.emp);
+  assert.equal(roots.world.hiddenIsh, original.ish);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(roots.user, "isPremium"), original.premium);
+  for (const type of ["message", "pagehide", "beforeunload"]) assert.equal(windowRef.count(type), 0);
+  assert.equal(windowRef.timers.size, 0);
+  assert.equal(windowRef[Symbol.for("sa-ckda-installation-v1")], undefined);
+  assert.equal(installation.cleanup(), false);
+  const count = windowRef.messages.length;
+  windowRef.tick();
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.equal(windowRef.messages.length, count);
+}
+
+function originalInstallationState(roots) {
+  return { emp: roots.world.addEmpNew, ish: roots.world.hiddenIsh,
+    premium: Object.getOwnPropertyDescriptor(roots.user, "isPremium") };
+}
+
+test("explicit teardown restores MAIN mutations, clears its guard, and permits fresh installation", () => {
+  const roots = installerRoots();
+  const original = originalInstallationState(roots);
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  windowRef.command({ type: "teardown", targetId: 8 });
+  assert.equal(roots.user.isPremium, true, "malformed teardown must be ignored");
+  windowRef.command({ type: "teardown" });
+  assertInstallationReleased(windowRef, roots, original, installation);
+  const next = installCkda(windowRef);
+  assert.notEqual(next, installation);
+  next.cleanup();
+});
+
+test("MAIN lease expires at 120000 monotonic ms and checks every 5000 ms", (t) => {
+  let wall = 1_700_000_000_000;
+  let elapsed = 0;
+  t.mock.method(Date, "now", () => wall);
+  const roots = installerRoots();
+  const original = originalInstallationState(roots);
+  const windowRef = installerWindow(roots);
+  windowRef.performance = { timeOrigin: 1_700_000_000_000, now: () => elapsed };
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-premium", enabled: true });
+  assert.ok([...windowRef.delays.values()].includes(5000));
+  elapsed = 119999;
+  wall += 600000;
+  windowRef.tick();
+  assert.equal(roots.user.isPremium, true);
+  elapsed = 120000;
+  wall -= 1200000;
+  windowRef.tick();
+  assertInstallationReleased(windowRef, roots, original, installation);
+});
+
+test("active isolated lease renewal prevents expiry until 120000 ms after final renewal", () => {
+  let current = 1000;
+  const roots = installerRoots();
+  const original = originalInstallationState(roots);
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef, { now: () => current });
+  windowRef.command({ type: "set-premium", enabled: true });
+  for (let count = 0; count < 12; count++) {
+    current += 15000;
+    windowRef.command({ type: "renew-lease" });
+    windowRef.tick();
+    assert.equal(roots.user.isPremium, true);
+  }
+  current += 119999;
+  windowRef.tick();
+  assert.equal(roots.user.isPremium, true);
+  current++;
+  windowRef.tick();
+  assertInstallationReleased(windowRef, roots, original, installation);
+});
+
+test("teardown and expired lease stop waiting-for-roots polling", () => {
+  for (const action of ["teardown", "expiry"]) {
+    let current = 1000;
+    const windowRef = installerWindow();
+    installCkda(windowRef, { now: () => current });
+    if (action === "teardown") windowRef.command({ type: "teardown" });
+    else { current += 120000; windowRef.tick(); }
+    assert.equal(windowRef.timers.size, 0);
+    assert.equal(windowRef.count("message"), 0);
+    assert.equal(windowRef[Symbol.for("sa-ckda-installation-v1")], undefined);
+  }
+});
 
 function installerRoots() {
   const roots = liveRoots();
@@ -585,15 +757,49 @@ function installerRoots() {
   return roots;
 }
 
+test("MAIN publisher and effect cooldowns use performance epoch time despite wall-clock jumps", (t) => {
+  let wall = 1_700_000_000_000;
+  let elapsed = 0;
+  t.mock.method(Date, "now", () => wall);
+  const roots = installerRoots();
+  const windowRef = installerWindow(roots);
+  windowRef.performance = { timeOrigin: 1_700_000_000_000, now: () => elapsed };
+  const installation = installCkda(windowRef);
+  roots.world.addEmpNew({ ID: 8 });
+  wall -= 60_000;
+  elapsed = 250;
+  windowRef.tick();
+  assert.equal(windowRef.snapshot().timestamp, 1_700_000_000_250);
+  assert.equal(windowRef.snapshot().players[0].observedAt, 1_700_000_000_250);
+  wall += 120_000;
+  elapsed = 1000;
+  windowRef.tick();
+  assert.equal(windowRef.snapshot().timestamp, 1_700_000_001_000);
+  assert.equal(windowRef.snapshot().players[0].empEndsAt, 1_700_000_028_000);
+  elapsed = 28_000;
+  windowRef.tick();
+  assert.equal(windowRef.snapshot().players[0].empEndsAt, null);
+  installation.cleanup();
+});
+
+test("standalone publisher defaults to its window performance epoch clock", (t) => {
+  t.mock.method(Date, "now", () => 9999);
+  const windowRef = installerWindow(liveRoots());
+  windowRef.performance = { timeOrigin: 1000, now: () => 250 };
+  const publisher = startCkdaPublisher(windowRef, windowRef.__SA_BOT_ROOTS__);
+  assert.equal(windowRef.snapshot().timestamp, 1250);
+  publisher.stop();
+});
+
 test("MAIN installer waits for supported roots, installs once, and announces ready", () => {
   assert.equal(typeof installCkda, "function");
   const windowRef = installerWindow();
   const installation = installCkda(windowRef);
   assert.equal(installCkda(windowRef), installation);
-  assert.equal(windowRef.timers.size, 1);
+  assert.equal(windowRef.timers.size, 2);
   windowRef.__SA_BOT_ROOTS__ = installerRoots();
   windowRef.tick();
-  assert.equal(windowRef.timers.size, 1);
+  assert.equal(windowRef.timers.size, 2);
   assert.equal(windowRef.count("message"), 1);
   assert.equal(windowRef.snapshot().mapId, 17);
   assert.equal(windowRef.messages.some(value => value.direction === "result" && value.payload.type === "ready"), true);
@@ -735,7 +941,7 @@ test("manifest MAIN scripts auto-install once even when the entry point is evalu
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", name), "utf8"), context);
   }
   assert.equal(windowRef.count("message"), 1);
-  assert.equal(windowRef.timers.size, 1);
+  assert.equal(windowRef.timers.size, 2);
   assert.equal(windowRef.snapshot().mapId, 17);
   // Build message data in the page realm, as browser-delivered events do.
   vm.runInContext('window.emit("message", { source: window, data: { channel: "sa-ckda-v1", direction: "command", payload: { requestId: 1, type: "set-premium", enabled: true } } })', context);
@@ -745,10 +951,10 @@ test("manifest MAIN scripts auto-install once even when the entry point is evalu
   assert.equal(windowRef.timers.size, 0);
 });
 
-test("real publisher delivers a deterministic bounded snapshot through the bridge with 32 players", () => {
+test("real publisher rotates all 32 players through the bounded bridge within two publications", () => {
   const roots = liveRoots();
   roots.world.MAP_SHIPS = new Map(Array.from({ length: 32 }, (_, index) => {
-    const ship = mapShip(`player-${index}-é`);
+    const ship = mapShip(`player-${index}-é`, { isCloaked: index === 31 });
     return [ship.ID, ship];
   }));
   const windowRef = installerWindow(roots);
@@ -766,7 +972,48 @@ test("real publisher delivers a deterministic bounded snapshot through the bridg
   assert.deepEqual(received[0].players.map(player => player.id),
     Array.from({ length: received[0].players.length }, (_, index) => `player-${index}-é`));
   publisher.refresh();
-  assert.deepEqual(received[1], received[0]);
+  assert.equal(new Set(received.flatMap(value => value.players.map(player => player.id))).size, 32);
+  assert.equal(received[1].players.some(player => player.id === "player-31-é" && player.cloaked), true);
+  for (const message of windowRef.messages) {
+    assert.ok(new TextEncoder().encode(JSON.stringify(message)).byteLength <= 4096);
+  }
   publisher.stop();
   bridge.destroy();
+});
+
+for (const reason of ["world", "map", "disconnect", "unsupported", "clear"]) {
+  test(`publisher resets rotating cursor and clears remote observations on ${reason}`, () => {
+    const roots = liveRoots();
+    roots.world.MAP_SHIPS = new Map(Array.from({ length: 32 }, (_, id) => [id, mapShip(`player-${id}`)]));
+    const windowRef = installerWindow(roots);
+    const publisher = startCkdaPublisher(windowRef, roots, { now: () => 1000 });
+    const firstId = windowRef.snapshot().players[0].id;
+    if (reason === "world") roots.world = { ...roots.world };
+    else if (reason === "map") roots.world.mapId = 18;
+    else if (reason === "disconnect") roots.network.connected = false;
+    else if (reason === "unsupported") roots.version = "1.9.0.052";
+    else {
+      assert.equal(typeof publisher.clear, "function");
+      publisher.clear();
+    }
+    publisher.refresh();
+    assert.equal(windowRef.messages.some(message => message.payload.connectionState === "disconnected"), true);
+    roots.network.connected = true;
+    roots.version = "n1.9.0.051";
+    if (reason === "disconnect" || reason === "unsupported") publisher.refresh();
+    assert.equal(windowRef.snapshot().players[0].id, firstId);
+    publisher.stop();
+  });
+}
+
+test("one untransportable player record cannot starve valid records behind it", () => {
+  const roots = liveRoots();
+  roots.world.MAP_SHIPS = new Map([
+    [1, mapShip("é".repeat(4096))], [2, mapShip("visible", { isCloaked: true })]
+  ]);
+  const windowRef = installerWindow(roots);
+  const publisher = startCkdaPublisher(windowRef, roots, { now: () => 1000 });
+  assert.deepEqual(windowRef.snapshot().players.map(player => player.id), ["visible"]);
+  assert.ok(new TextEncoder().encode(JSON.stringify(windowRef.messages[0])).byteLength <= 4096);
+  publisher.stop();
 });

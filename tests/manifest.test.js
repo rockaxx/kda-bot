@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const cKdaAsset = "assets/c-kda.gif";
@@ -57,7 +58,7 @@ test("every declared script exists", () => {
   }
 });
 
-test("packages the local C-KDA GIF as a game-scoped web resource", () => {
+test("packages the local C-KDA GIF with Chrome-valid origin-scoped resource matches", () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(root, "manifest.json"), "utf8")
   );
@@ -66,7 +67,38 @@ test("packages the local C-KDA GIF as a game-scoped web resource", () => {
   );
 
   assert.ok(resource, "C-KDA GIF must be declared as a web-accessible resource");
-  assert.deepEqual(resource.matches, ["https://steam.space-aces.com/gameNew*"]);
+  assert.deepEqual(resource.matches, ["https://steam.space-aces.com/*"]);
+});
+
+function checkManifest(manifest) {
+  const errors = [];
+  let exitCode = 0;
+  vm.runInNewContext(fs.readFileSync(path.join(root, "scripts/check-extension.js"), "utf8"), {
+    __dirname: path.join(root, "scripts"),
+    require(name) {
+      if (name !== "node:fs") return require(name);
+      return { ...fs, readFileSync(file, ...args) {
+        return file === path.join(root, "manifest.json")
+          ? JSON.stringify(manifest) : fs.readFileSync(file, ...args);
+      } };
+    },
+    console: { log() {}, error(value) { errors.push(value); } },
+    process: { exit(code) { exitCode = code; } }
+  });
+  return { exitCode, errors: errors.join("\n") };
+}
+
+test("checker rejects gameNew WAR paths while accepting the origin wildcard", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+  manifest.web_accessible_resources[0].matches = ["https://steam.space-aces.com/gameNew*"];
+  assert.equal(checkManifest(manifest).exitCode, 1, "Chrome rejects a WAR path other than /*");
+  manifest.web_accessible_resources[0].matches = ["https://steam.space-aces.com/*"];
+  assert.deepEqual(checkManifest(manifest), { exitCode: 0, errors: "" });
+  for (const script of manifest.content_scripts) {
+    script.matches = ["https://steam.space-aces.com/*"];
+    assert.match(checkManifest(manifest).errors, /unexpected content script match/);
+    script.matches = ["https://steam.space-aces.com/gameNew*"];
+  }
 });
 
 test("packages the validated C-KDA GIF binary", () => {

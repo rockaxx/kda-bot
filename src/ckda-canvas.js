@@ -72,7 +72,7 @@
     return true;
   }
 
-  function createCkdaCanvas({ documentRef, windowRef, now = Date.now }) {
+  function createCkdaCanvas({ documentRef, windowRef, now }) {
     if (
       !documentRef ||
       !documentRef.body ||
@@ -82,6 +82,8 @@
     ) {
       throw new TypeError("C-KDA canvas requires document and animation frame");
     }
+    const clock = typeof now === "function" ? now :
+      dependency.createMonotonicEpochClock(windowRef.performance);
 
     const canvas = documentRef.createElement("canvas");
     canvas.id = CANVAS_ID;
@@ -95,6 +97,7 @@
     const context = canvas.getContext("2d");
     let latestSnapshot = null;
     let latestSettings = null;
+    const observations = new Map();
     let frameId = null;
     let destroyed = false;
 
@@ -153,7 +156,7 @@
 
     function currentTime() {
       try {
-        const value = now();
+        const value = clock();
         return Number.isFinite(value) && value >= 0 ? value : null;
       } catch (_) {
         return null;
@@ -164,13 +167,16 @@
       const viewportSize = resize();
       erase(viewportSize);
       const timestamp = currentTime();
+      for (const [id, player] of observations) {
+        if (timestamp === null || player.observedAt > timestamp ||
+            timestamp - player.observedAt > STALE_AFTER_MS) observations.delete(id);
+      }
       if (
         !context ||
         !latestSnapshot ||
         !latestSettings ||
         latestSettings.overlayEnabled !== true ||
         latestSnapshot.connectionState !== "connected" ||
-        latestSnapshot.premiumState === "unsupported" ||
         timestamp === null ||
         latestSnapshot.timestamp > timestamp ||
         timestamp - latestSnapshot.timestamp > STALE_AFTER_MS
@@ -179,7 +185,7 @@
       }
 
       const players = dependency.filterVisiblePlayers(
-        latestSnapshot.players,
+        Array.from(observations.values()),
         latestSettings,
         timestamp,
         viewportSize,
@@ -211,15 +217,26 @@
     }
 
     function render(snapshot, settings) {
+      if (destroyed) return false;
       const checkedSnapshot = dependency.validateCkdaSnapshot(snapshot);
       const checkedSettings = dependency.normalizeCkdaSettings(settings);
       if (!checkedSnapshot.ok || !checkedSettings.ok) {
-        latestSnapshot = null;
-        latestSettings = null;
-        erase();
+        clear();
         return false;
       }
-      latestSnapshot = checkedSnapshot.value;
+      const next = checkedSnapshot.value;
+      if (!latestSnapshot || latestSnapshot.mapId !== next.mapId ||
+          next.connectionState !== "connected") {
+        observations.clear();
+        latestSnapshot = null;
+      }
+      if (next.connectionState === "connected") {
+        for (const player of next.players) {
+          const previous = observations.get(player.id);
+          if (!previous || previous.observedAt <= player.observedAt) observations.set(player.id, player);
+        }
+      }
+      if (!latestSnapshot || latestSnapshot.timestamp <= next.timestamp) latestSnapshot = next;
       latestSettings = checkedSettings.value;
       schedule();
       return true;
@@ -228,6 +245,7 @@
     function clear() {
       latestSnapshot = null;
       latestSettings = null;
+      observations.clear();
       erase();
     }
 
@@ -241,6 +259,7 @@
     function destroy() {
       if (destroyed) return;
       destroyed = true;
+      clear();
       if (frameId !== null) windowRef.cancelAnimationFrame?.(frameId);
       frameId = null;
       windowRef.removeEventListener?.("resize", handleResize);

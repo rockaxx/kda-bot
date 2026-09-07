@@ -10,6 +10,7 @@ const allowedPermissions = new Set(["storage"]);
 const exactMatch = JSON.stringify([
   "https://steam.space-aces.com/gameNew*"
 ]);
+const resourceMatch = JSON.stringify(["https://steam.space-aces.com/*"]);
 const cKdaAsset = "assets/c-kda.gif";
 const expectedScripts = {
   MAIN: [
@@ -87,8 +88,8 @@ for (const [world, scripts] of Object.entries(expectedScripts)) {
 const cKdaResource = (manifest.web_accessible_resources || []).find((entry) =>
   Array.isArray(entry.resources) && entry.resources.includes(cKdaAsset)
 );
-if (!cKdaResource || JSON.stringify(cKdaResource.matches) !== exactMatch) {
-  errors.push("missing game-scoped C-KDA asset resource");
+if (!cKdaResource || JSON.stringify(cKdaResource.matches) !== resourceMatch) {
+  errors.push("missing origin-scoped C-KDA asset resource (WAR path must be /*)");
 }
 
 const cKdaAssetPath = path.join(root, cKdaAsset);
