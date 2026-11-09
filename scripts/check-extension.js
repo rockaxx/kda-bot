@@ -12,6 +12,8 @@ const exactMatch = JSON.stringify([
 ]);
 const resourceMatch = JSON.stringify(["https://steam.space-aces.com/*"]);
 const cKdaAsset = "assets/c-kda.gif";
+const loadingAsset = "assets/besto.gif";
+const loadingCss = "src/loading-screen.css";
 const expectedScripts = {
   MAIN: [
     "src/namespace-main.js",
@@ -19,7 +21,7 @@ const expectedScripts = {
     "src/page-adapter.js",
     "src/ckda-schema-main.js",
     "src/ckda-core-main.js",
-  "src/design-main.js",
+    "src/design-main.js",
     "src/ckda-main.js"
   ],
   ISOLATED: [
@@ -115,6 +117,29 @@ if (!fs.existsSync(cKdaAssetPath)) {
   }
 }
 
+const isolatedEntry = (manifest.content_scripts || []).find((entry) => entry.world === "ISOLATED");
+if (!isolatedEntry || !Array.isArray(isolatedEntry.css) || !isolatedEntry.css.includes(loadingCss)) {
+  errors.push("missing loading-screen stylesheet");
+}
+const loadingResource = (manifest.web_accessible_resources || []).find((entry) =>
+  Array.isArray(entry.resources) && entry.resources.includes(loadingAsset)
+);
+if (!loadingResource || JSON.stringify(loadingResource.matches) !== resourceMatch) {
+  errors.push("missing origin-scoped loading GIF resource");
+}
+const loadingAssetPath = path.join(root, loadingAsset);
+if (!fs.existsSync(loadingAssetPath)) {
+  errors.push("missing loading GIF asset");
+} else {
+  const asset = fs.readFileSync(loadingAssetPath);
+  if (!new Set(["GIF87a", "GIF89a"]).has(asset.subarray(0, 6).toString("ascii"))) {
+    errors.push("invalid loading GIF signature");
+  }
+  if (asset.byteLength !== 12703381) {
+    errors.push(`unexpected loading GIF size: ${asset.byteLength}`);
+  }
+}
+
 const sourceDir = path.join(root, "src");
 const maintainedSource = fs.readdirSync(sourceDir)
   .filter((name) => name.endsWith(".js"))
@@ -140,4 +165,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log("extension check passed: scripts, C-KDA asset, version, channels, hook safety");
+console.log("extension check passed: scripts, C-KDA/loading assets, version, channels, hook safety");

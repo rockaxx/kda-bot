@@ -35,6 +35,9 @@
     empCooldownMs: { min: "1000", max: "120000", step: "1000" },
     ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
   });
+  const DESIGN_FIELD_DEFINITIONS = Object.freeze([
+    ["rankId", "Rank design", "number"]
+  ]);
   const EXPECTED_CLIENT_VERSION = "1.9.0.052";
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
@@ -100,6 +103,11 @@
 
   function createCkdaFormState(inputs) {
     const form = createFormState(inputs, CKDA_FIELD_DEFINITIONS);
+    return { ...form, readSettings: form.read };
+  }
+
+  function createDesignFormState(inputs) {
+    const form = createFormState(inputs, DESIGN_FIELD_DEFINITIONS);
     return { ...form, readSettings: form.read };
   }
 
@@ -211,6 +219,7 @@
     onStop,
     onSave,
     onSaveCkda = () => false,
+    onSaveDesign = () => false,
     onCkdaCommand = () => {},
     onExport
   }) {
@@ -247,7 +256,7 @@
         background: #7f6066; box-shadow: 0 0 0 3px rgba(127,96,102,.12); }
       .live-pill.on { color: #fda4af; border-color: rgba(244,63,94,.32); }
       .live-pill.on::before { background: #f43f5e; box-shadow: 0 0 10px #e11d48; }
-      .tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin: 0 14px;
+      .tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin: 0 14px;
         padding: 4px; border: 1px solid rgba(148,163,184,.1); border-radius: 11px;
         background: rgba(12,3,7,.68); }
       .tab { padding: 8px; border: 0; border-radius: 8px; color: #9b7279;
@@ -320,19 +329,19 @@
     title.textContent = "KDA";
     const subtitle = documentRef.createElement("div");
     subtitle.className = "subtitle";
-    subtitle.textContent = "NPC Automation Console";
+    subtitle.textContent = "Visual Customization Console";
     heading.append(title, subtitle);
     const livePill = documentRef.createElement("div");
     livePill.className = "live-pill";
-    livePill.textContent = "IDLE";
+    livePill.textContent = "VISUAL";
     header.append(logo, heading, livePill);
     panel.appendChild(header);
 
-    const tabState = createPanelState(["bot", "ckda", "settings"]);
+    const tabState = createPanelState(["ckda", "design"]);
     const tabs = documentRef.createElement("nav");
     tabs.className = "tabs";
     const tabButtons = {};
-    for (const [name, text] of [["bot", "BOT"], ["ckda", "C-KDA"], ["settings", "Settings"]]) {
+    for (const [name, text] of [["ckda", "C-KDA"], ["design", "Design"]]) {
       const button = documentRef.createElement("button");
       button.className = "tab";
       button.textContent = text;
@@ -392,6 +401,19 @@
       ckdaFields.appendChild(field);
     }
     const ckdaForm = createCkdaFormState(ckdaInputs);
+
+    const designInputs = {};
+    const rankSelect = documentRef.createElement("select");
+    rankSelect.id = "sa-design-rankId";
+    rankSelect.dataset.designSetting = "rankId";
+    for (let rankId = 0; rankId <= 20; rankId += 1) {
+      const option = documentRef.createElement("option");
+      option.value = String(rankId);
+      option.textContent = rankId === 0 ? "Default game rank" : `Rank ${rankId}`;
+      rankSelect.appendChild(option);
+    }
+    designInputs.rankId = rankSelect;
+    const designForm = createDesignFormState(designInputs);
 
     const makeButton = (text, className, parent) => {
       const button = documentRef.createElement("button");
@@ -519,7 +541,28 @@
       ckdaStatusGrid.appendChild(metric);
     }
     ckdaView.appendChild(ckdaStatusGrid);
-    panel.append(dashboard, ckdaView, settingsView);
+
+    const designView = documentRef.createElement("div");
+    designView.className = "view";
+    designView.dataset.view = "design";
+    const designTitle = documentRef.createElement("div");
+    designTitle.className = "section-title";
+    designTitle.textContent = "Rank appearance";
+    const designFields = documentRef.createElement("div");
+    designFields.className = "settings-grid";
+    const rankField = documentRef.createElement("div");
+    rankField.className = "field wide";
+    const rankLabel = documentRef.createElement("label");
+    rankLabel.textContent = "Hero rank";
+    rankLabel.htmlFor = rankSelect.id;
+    rankField.append(rankLabel, rankSelect);
+    designFields.appendChild(rankField);
+    const designNote = documentRef.createElement("div");
+    designNote.className = "ckda-visual";
+    designNote.textContent = "Visual-only local override. Default restores the original game rank.";
+    const saveDesignButton = makeButton("SAVE DESIGN", "action wide", designView);
+    designView.prepend(designTitle, designFields, designNote);
+    panel.append(ckdaView, designView);
 
     const footer = documentRef.createElement("footer");
     footer.className = "footer";
@@ -542,9 +585,8 @@
       for (const name of Object.keys(tabButtons)) {
         tabButtons[name].classList.toggle("active", current.activeTab === name);
       }
-      dashboard.hidden = current.activeTab !== "bot";
       ckdaView.hidden = current.activeTab !== "ckda";
-      settingsView.hidden = current.activeTab !== "settings";
+      designView.hidden = current.activeTab !== "design";
     }
 
     for (const [name, button] of Object.entries(tabButtons)) {
@@ -570,6 +612,7 @@
     stopButton.addEventListener("click", () => onStop());
     saveButton.addEventListener("click", () => settingsForm.submit(onSave));
     saveCkdaButton.addEventListener("click", () => ckdaForm.submit(onSaveCkda));
+    saveDesignButton.addEventListener("click", () => designForm.submit(onSaveDesign));
     clearCkdaButton.addEventListener("click", () => onCkdaCommand("clear"));
     exportButton.addEventListener("click", () => onExport());
 
@@ -577,6 +620,7 @@
       lastModel = { ...model };
       settingsForm.sync(model.settings);
       ckdaForm.sync(model.ckdaSettings);
+      designForm.sync(model.designSettings);
       startButton.disabled = !canStartBot(model) || Boolean(model.active);
       stopButton.disabled = !model.active;
       exportButton.disabled = !model.diagnostic && !model.clientSource;
@@ -612,6 +656,7 @@
     return {
       destroy,
       readCkdaSettings: ckdaForm.readSettings,
+      readDesignSettings: designForm.readSettings,
       readSettings: settingsForm.readSettings,
       render
     };
@@ -622,6 +667,7 @@
     createExportFile,
     createOverlay,
     createCkdaFormState,
+    createDesignFormState,
     createPanelState,
     createSettingsFormState,
     formatCkdaStatus,

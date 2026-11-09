@@ -92,3 +92,9 @@
 - [ ] Run `git diff --check` and inspect diff for unrelated/generated/sensitive files.
 - [ ] Commit exact task files with a Conventional Commit message.
 
+### Added scope: packaged loading screen
+
+- Copy the user-provided `besto.gif` into maintained extension assets.
+- Inject `src/loading-screen.css` at `document_start` and override only the body loading background.
+- Test manifest resource scope, binary presence, and CSS reference.
+

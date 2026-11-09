@@ -6,7 +6,7 @@
   "permissions": ["storage"],
   "web_accessible_resources": [
     {
-      "resources": ["assets/c-kda.gif"],
+      "resources": ["assets/c-kda.gif", "assets/besto.gif"],
       "matches": ["https://steam.space-aces.com/*"]
     }
   ],
@@ -27,6 +27,7 @@
     },
     {
       "matches": ["https://steam.space-aces.com/gameNew*"],
+      "css": ["src/loading-screen.css"],
       "js": [
         "src/namespace.js",
         "src/ckda-schema.js",

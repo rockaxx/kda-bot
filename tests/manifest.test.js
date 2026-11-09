@@ -108,6 +108,17 @@ test("packages the validated C-KDA GIF binary", () => {
   assert.equal(["GIF87a", "GIF89a"].includes(asset.subarray(0, 6).toString("ascii")), true);
 });
 
+test("packages the custom KDA loading GIF and injects its body background CSS", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+  const isolated = manifest.content_scripts.find(entry => entry.world === "ISOLATED");
+  const resources = manifest.web_accessible_resources.flatMap(entry => entry.resources || []);
+  assert.ok(isolated.css.includes("src/loading-screen.css"));
+  assert.ok(resources.includes("assets/besto.gif"));
+  assert.ok(fs.statSync(path.join(root, "assets/besto.gif")).size > 0);
+  assert.match(fs.readFileSync(path.join(root, "src/loading-screen.css"), "utf8"), /besto\.gif/);
+  assert.match(fs.readFileSync(path.join(root, "src/loading-screen.css"), "utf8"), /background-image:[^;]+!important/);
+});
+
 test("maintained extension source does not install broad global hooks", () => {
   const sourceDir = path.join(root, "src");
   const source = fs.readdirSync(sourceDir)

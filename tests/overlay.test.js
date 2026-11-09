@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   canStartBot,
   createCkdaFormState,
+  createDesignFormState,
   createOverlay,
   createSettingsFormState,
   createExportFile,
@@ -95,6 +96,42 @@ test("panel state toggles visibility and selects only known tabs", () => {
   assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
   assert.equal(state.selectTab("unknown"), false);
   assert.deepEqual(state.read(), { visible: false, activeTab: "settings" });
+});
+
+test("Design Mode rank selector reads numeric rank IDs", () => {
+  const listeners = {};
+  const input = {
+    value: "",
+    addEventListener(name, handler) { listeners[name] = handler; }
+  };
+  const form = createDesignFormState({ rankId: input });
+  form.sync({ rankId: 0 });
+  assert.equal(input.value, "0");
+  input.value = "20";
+  listeners.change();
+  let submitted;
+  form.submit((value) => { submitted = value; return true; });
+  assert.deepEqual(submitted, { rankId: 20 });
+});
+
+test("visible menu contains only C-KDA and Design tabs", () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({ documentRef });
+    const tabs = elements.find(element => element.tagName === "NAV");
+    assert.deepEqual(tabs.children.map(button => [button.dataset.tab, button.textContent]), [
+      ["ckda", "C-KDA"], ["design", "Design"]
+    ]);
+    const design = elements.find(element => element.dataset.view === "design");
+    assert.ok(design);
+    assert.equal(elements.find(element => element.dataset.view === "bot")?.parentNode, undefined);
+    assert.equal(elements.find(element => element.dataset.view === "settings")?.parentNode, undefined);
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
 });
 
 test("C-KDA drafts survive telemetry renders until successful save", () => {

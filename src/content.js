@@ -5,7 +5,7 @@
   const api = root.__SA_BOT_ISOLATED_V1__;
   const requiredApi = [
     "createCkdaBridge", "createCkdaCanvas", "createMonotonicEpochClock",
-    "normalizeCkdaSettings", "validateCkdaSnapshot"
+    "normalizeCkdaSettings", "normalizeDesignSettings", "validateCkdaSnapshot"
   ];
   // An unpacked extension can briefly run new files with its previously
   // registered manifest. Exit cleanly until Chrome reloads the full script set.
@@ -88,7 +88,7 @@
   if (unloaded) return;
 
   api.whenDocumentReady(document, () => {
-    chrome.storage.local.get(["settings", "ckdaSettings"], (stored = {}) => {
+    chrome.storage.local.get(["settings", "ckdaSettings", "designSettings"], (stored = {}) => {
     if (unloaded) return;
     let normalized = api.normalizeSettings(stored.settings || {});
     let settings = normalized.value;
@@ -99,6 +99,7 @@
     let snapshot = null;
     let runtime = null;
     let ckdaSettings = api.normalizeCkdaSettings(stored.ckdaSettings || {}).value;
+    let designSettings = api.normalizeDesignSettings(stored.designSettings || {}).value;
     let ckdaSaving = false;
     // Source compatibility is a page-lifetime gate, independent of transient UI failures.
     let ckdaSourceUnsupported = false;
@@ -123,6 +124,7 @@
         clientSource,
         snapshot,
         ckdaSettings,
+        designSettings,
         ckdaSnapshot,
         ckdaStatus,
         state: runtime ? runtime.getState() : controller.getState(),
@@ -148,6 +150,7 @@
         ishCooldownMs: ckdaSettings.ishCooldownMs
       });
       ckdaBridge.sendCommand("set-premium", { enabled: ckdaSettings.premiumOverride });
+      ckdaBridge.sendCommand("set-design-rank", { rankId: designSettings.rankId });
       ckdaBridge.sendCommand("refresh");
     }
 
@@ -236,6 +239,21 @@
           return false;
         } finally {
           ckdaSaving = false;
+        }
+      },
+      async onSaveDesign(rawSettings) {
+        if (unloaded) return false;
+        const candidate = api.normalizeDesignSettings(rawSettings);
+        if (!candidate.ok) return false;
+        try {
+          await chrome.storage.local.set({ designSettings: { ...candidate.value } });
+          if (unloaded) return false;
+          designSettings = candidate.value;
+          return ckdaAction(() => {
+            ckdaBridge.sendCommand("set-design-rank", { rankId: designSettings.rankId });
+          });
+        } catch (_) {
+          return false;
         }
       },
       onCkdaCommand(type) {

@@ -43,6 +43,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   };
   window.__SA_BOT_ISOLATED_V1__ = {
     ...require("../src/settings.js"), ...require("../src/ckda-settings.js"),
+    ...require("../src/design-settings.js"),
     ...require("../src/ckda-schema.js"),
     ...require("../src/ckda-core.js"),
     whenDocumentReady(_document, callback) { callback(); },
@@ -236,10 +237,22 @@ test("C-KDA lease send failure reports an error without releasing BOT resources"
 
 test("content loads independent C-KDA defaults and initializes MAIN settings", () => {
   const app = setup();
-  assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings"]);
+  assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings", "designSettings"]);
   assert.equal(app.model().ckdaSettings.empCooldownMs, 28000);
   assert.equal(app.model().ckdaSettings.premiumOverride, false);
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "set-design-rank", "refresh"]);
+});
+
+test("Design Mode persists normalized rank and applies it without BOT lifecycle", async () => {
+  const app = setup({ designSettings: { rankId: 4 } });
+  assert.equal(app.model().designSettings.rankId, 4);
+  assert.equal(app.calls.commands.find(value => value.type === "set-design-rank").payload.rankId, 4);
+  assert.equal(await app.options().onSaveDesign({ rankId: 19, extra: "discard" }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), { designSettings: { rankId: 19 } });
+  assert.equal(app.calls.commands.filter(value => value.type === "set-design-rank").at(-1).payload.rankId, 19);
+  assert.equal(app.calls.starts + app.calls.stops, 0);
+  assert.equal(await app.options().onSaveDesign({ rankId: 21 }), false);
+  assert.equal(app.model().designSettings.rankId, 19);
 });
 
 test("C-KDA saves normalized settings and updates canvas and Premium independently", async () => {
@@ -357,7 +370,7 @@ test("late MAIN readiness resends persisted C-KDA configuration without BOT life
   assert.equal(app.model().ckdaSettings.sizePx, 8);
   app.calls.commands.length = 0;
   app.result({ type: "ready" });
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "set-design-rank", "refresh"]);
   assert.equal(app.calls.commands[0].payload.empCooldownMs, 15000);
   assert.equal(app.calls.commands[1].payload.enabled, true);
   assert.equal(app.calls.starts + app.calls.stops, 0);
