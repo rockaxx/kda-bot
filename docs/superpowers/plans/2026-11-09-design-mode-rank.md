@@ -97,4 +97,3 @@
 - Copy the user-provided `besto.gif` into maintained extension assets.
 - Inject `src/loading-screen.css` at `document_start` and override only the body loading background.
 - Test manifest resource scope, binary presence, and CSS reference.
-

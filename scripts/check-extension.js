@@ -165,4 +165,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log("extension check passed: scripts, C-KDA/loading assets, version, channels, hook safety");
+console.log("extension check passed: scripts, C-KDA asset, loading asset, version, channels, hook safety");

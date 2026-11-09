@@ -12,7 +12,6 @@ test("Design Mode defaults to the original game rank", () => {
   assert.ok(designApi, "design settings module must exist");
   assert.deepEqual(designApi.DESIGN_DEFAULT_SETTINGS, { rankId: 0 });
 });
-
 test("Design Mode accepts only integer rank IDs from 0 through 20", () => {
   assert.ok(designApi, "design settings module must exist");
   for (const rankId of [0, 1, 7, 20]) {

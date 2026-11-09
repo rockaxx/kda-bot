@@ -30,4 +30,3 @@ Chosen: a narrow MAIN-world rank overlay controlled through the existing validat
 ## Loading screen addendum
 
 The extension packages the user-provided `besto.gif` and injects an isolated content stylesheet at `document_start`. The stylesheet replaces the mod body background image with the packaged GIF using an `!important` background-image declaration while retaining cover, center, no-repeat, and black fallback behavior. No local `file://` path is exposed to the page.
-
