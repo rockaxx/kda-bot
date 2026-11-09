@@ -29,6 +29,7 @@
       "matches": ["https://steam.space-aces.com/gameNew*"],
       "css": ["src/loading-screen.css"],
       "js": [
+        "src/loading-screen.js",
         "src/namespace.js",
         "src/ckda-schema.js",
         "src/ckda-settings.js",

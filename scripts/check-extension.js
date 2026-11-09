@@ -25,6 +25,7 @@ const expectedScripts = {
     "src/ckda-main.js"
   ],
   ISOLATED: [
+    "src/loading-screen.js",
     "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",

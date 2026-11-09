@@ -122,3 +122,23 @@ test("rank asset URL and setter reject invalid rank IDs", () => {
   }
   controller.cleanup();
 });
+
+test("rank override falls back to current-client hero wrapper without hiding the ship", () => {
+  const value = harness();
+  delete value.roots.user.ship.rankLogo;
+  value.roots.user.ship.wrapper = value.rankWrapper;
+  const controller = createRankOverride({
+    windowRef: value.windowRef,
+    documentRef: value.documentRef,
+    getRoots: () => value.roots
+  });
+
+  controller.setRank(19);
+  value.image.onload();
+  value.tick();
+  assert.equal(value.image.style.display, "block");
+  assert.equal(value.image.style.left, "321px");
+  assert.equal(value.image.style.top, "75px");
+  assert.equal(value.rankWrapper.visible, true, "fallback must never hide the full hero ship");
+  controller.cleanup();
+});

@@ -17,11 +17,15 @@
       : null;
   }
 
-  function rankWrapperFromRoots(roots) {
+  function rankTargetFromRoots(roots) {
     try {
       const ship = roots && roots.user && roots.user.ship;
       const rankLogo = ship && ship.rankLogo;
-      return rankLogo && (rankLogo.wrapper || (rankLogo.renderer && rankLogo.renderer.wrapper) || rankLogo);
+      const rankWrapper = rankLogo &&
+        (rankLogo.wrapper || (rankLogo.renderer && rankLogo.renderer.wrapper) || rankLogo);
+      if (rankWrapper) return { wrapper: rankWrapper, hideNative: true, offsetY: 0 };
+      const shipWrapper = ship && (ship.wrapper || (ship.renderer && ship.renderer.wrapper));
+      return shipWrapper ? { wrapper: shipWrapper, hideNative: false, offsetY: -48 } : null;
     } catch (_) {
       return null;
     }
@@ -98,21 +102,24 @@
       if (stopped || rankId === 0) return restoreNative();
       if (failed) return restoreNative();
       connectImage();
-      const wrapper = rankWrapperFromRoots(getRoots());
+      const target = rankTargetFromRoots(getRoots());
+      const wrapper = target && target.wrapper;
       const point = loaded && !failed ? project(wrapper) : null;
       if (!wrapper || !point) {
         restoreNative();
         schedule();
         return;
       }
-      if (hiddenWrapper !== wrapper) {
+      if (target.hideNative && hiddenWrapper !== wrapper) {
         restoreNative();
         hiddenWrapper = wrapper;
         hiddenWrapperVisible = wrapper.visible;
       }
-      try { wrapper.visible = false; } catch (_) { restoreNative(); schedule(); return; }
+      if (target.hideNative) {
+        try { wrapper.visible = false; } catch (_) { restoreNative(); schedule(); return; }
+      }
       image.style.left = `${point.x}px`;
-      image.style.top = `${point.y}px`;
+      image.style.top = `${point.y + target.offsetY}px`;
       image.style.display = "block";
       schedule();
     }
