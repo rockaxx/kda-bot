@@ -17,6 +17,7 @@ const loadingCss = "src/loading-screen.css";
 const expectedScripts = {
   MAIN: [
     "src/namespace-main.js",
+    "src/design-model-main.js",
     "src/source-patch.js",
     "src/page-adapter.js",
     "src/ckda-schema-main.js",
@@ -26,6 +27,7 @@ const expectedScripts = {
   ],
   ISOLATED: [
     "src/loading-screen.js",
+    "src/design-bootstrap.js",
     "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",

@@ -36,7 +36,8 @@
     ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
   });
   const DESIGN_FIELD_DEFINITIONS = Object.freeze([
-    ["rankId", "Rank design", "number"]
+    ["rankId", "Rank design", "number"],
+    ["shipDesign", "Ship design", "select"]
   ]);
   const EXPECTED_CLIENT_VERSION = "1.9.0.052";
 
@@ -413,6 +414,16 @@
       rankSelect.appendChild(option);
     }
     designInputs.rankId = rankSelect;
+    const shipDesignSelect = documentRef.createElement("select");
+    shipDesignSelect.id = "sa-design-shipDesign";
+    shipDesignSelect.dataset.designSetting = "shipDesign";
+    for (const [value, text] of [["default", "Default Surgeon"], ["bastion", "Bastion"]]) {
+      const option = documentRef.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      shipDesignSelect.appendChild(option);
+    }
+    designInputs.shipDesign = shipDesignSelect;
     const designForm = createDesignFormState(designInputs);
 
     const makeButton = (text, className, parent) => {
@@ -557,9 +568,16 @@
     rankLabel.htmlFor = rankSelect.id;
     rankField.append(rankLabel, rankSelect);
     designFields.appendChild(rankField);
+    const shipField = documentRef.createElement("div");
+    shipField.className = "field wide";
+    const shipLabel = documentRef.createElement("label");
+    shipLabel.textContent = "Surgeon appearance";
+    shipLabel.htmlFor = shipDesignSelect.id;
+    shipField.append(shipLabel, shipDesignSelect);
+    designFields.appendChild(shipField);
     const designNote = documentRef.createElement("div");
     designNote.className = "ckda-visual";
-    designNote.textContent = "Visual-only local override. Default restores the original game rank.";
+    designNote.textContent = "Visual-only local override. Ship design changes after game reload.";
     const saveDesignButton = makeButton("SAVE DESIGN", "action wide", designView);
     designView.prepend(designTitle, designFields, designNote);
     panel.append(ckdaView, designView);

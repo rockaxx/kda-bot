@@ -244,15 +244,27 @@ test("content loads independent C-KDA defaults and initializes MAIN settings", (
 });
 
 test("Design Mode persists normalized rank and applies it without BOT lifecycle", async () => {
-  const app = setup({ designSettings: { rankId: 4 } });
+  const app = setup({ designSettings: { rankId: 4, shipDesign: "default" } });
   assert.equal(app.model().designSettings.rankId, 4);
   assert.equal(app.calls.commands.find(value => value.type === "set-design-rank").payload.rankId, 4);
   assert.equal(await app.options().onSaveDesign({ rankId: 19, extra: "discard" }), true);
-  assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), { designSettings: { rankId: 19 } });
+  assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), {
+    designSettings: { rankId: 19, shipDesign: "default" }
+  });
   assert.equal(app.calls.commands.filter(value => value.type === "set-design-rank").at(-1).payload.rankId, 19);
   assert.equal(app.calls.starts + app.calls.stops, 0);
   assert.equal(await app.options().onSaveDesign({ rankId: 21 }), false);
   assert.equal(app.model().designSettings.rankId, 19);
+});
+
+test("Design Mode persists Bastion ship choice without BOT lifecycle", async () => {
+  const app = setup();
+  assert.equal(await app.options().onSaveDesign({ rankId: 0, shipDesign: "bastion" }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), {
+    designSettings: { rankId: 0, shipDesign: "bastion" }
+  });
+  assert.equal(app.model().designSettings.shipDesign, "bastion");
+  assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 
 test("C-KDA saves normalized settings and updates canvas and Premium independently", async () => {

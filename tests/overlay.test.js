@@ -104,14 +104,31 @@ test("Design Mode rank selector reads numeric rank IDs", () => {
     value: "",
     addEventListener(name, handler) { listeners[name] = handler; }
   };
-  const form = createDesignFormState({ rankId: input });
-  form.sync({ rankId: 0 });
+  const shipInput = { value: "", addEventListener() {} };
+  const form = createDesignFormState({ rankId: input, shipDesign: shipInput });
+  form.sync({ rankId: 0, shipDesign: "bastion" });
   assert.equal(input.value, "0");
   input.value = "20";
   listeners.change();
   let submitted;
   form.submit((value) => { submitted = value; return true; });
-  assert.deepEqual(submitted, { rankId: 20 });
+  assert.deepEqual(submitted, { rankId: 20, shipDesign: "bastion" });
+});
+
+test("Design Mode exposes Default Surgeon and Bastion ship choices", () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({ documentRef });
+    const select = elements.find(element => element.dataset.designSetting === "shipDesign");
+    assert.deepEqual(select.children.map(option => [option.value, option.textContent]), [
+      ["default", "Default Surgeon"], ["bastion", "Bastion"]
+    ]);
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
 });
 
 test("visible menu contains only C-KDA and Design tabs", () => {
