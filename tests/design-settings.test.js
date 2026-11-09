@@ -27,4 +27,3 @@ test("Design Mode accepts only integer rank IDs from 0 through 20", () => {
     assert.deepEqual(result.errors, ["rankId must be an integer from 0 to 20"]);
   }
 });
-
