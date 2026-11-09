@@ -19,6 +19,7 @@ const expectedScripts = {
     "src/page-adapter.js",
     "src/ckda-schema-main.js",
     "src/ckda-core-main.js",
+  "src/design-main.js",
     "src/ckda-main.js"
   ],
   ISOLATED: [

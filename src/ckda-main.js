@@ -3,7 +3,8 @@
     typeof module === "object" && module.exports
       ? {
           ...require("./ckda-schema.js"),
-          ...require("./ckda-core.js")
+          ...require("./ckda-core.js"),
+          ...require("./design-main.js")
         }
       : root.__SA_BOT_MAIN_V1__;
   const api = factory(dependency);
@@ -527,6 +528,7 @@
     let publisher = null;
     let cooldowns = null;
     let premium = null;
+    let rankOverride = null;
     let hooks = null;
     let hookedWorld = null;
     let roots = null;
@@ -564,6 +566,8 @@
           updateHooks(true);
         } else if (command.type === "clear") {
           publisher.clear();
+        } else if (command.type === "set-design-rank") {
+          rankOverride?.setRank(command.rankId);
         }
         publisher.refresh();
       } catch (_) {
@@ -583,7 +587,7 @@
       windowRef.removeEventListener("beforeunload", cleanup);
       for (const release of [
         () => publisher?.stop(), () => hooks?.cleanup(),
-        () => premium?.disable(), () => cooldowns?.clearAll()
+        () => premium?.disable(), () => rankOverride?.cleanup(), () => cooldowns?.clearAll()
       ]) {
         try { release(); } catch (_) { /* Release the remaining independent resources. */ }
       }
@@ -603,6 +607,11 @@
         roots = candidate;
         cooldowns = dependency.createCooldownRegistry(now);
         premium = createPremiumOverride(roots, windowRef.document);
+        rankOverride = dependency.createRankOverride({
+          windowRef,
+          documentRef: windowRef.document,
+          getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots
+        });
         publisher = startCkdaPublisher(windowRef, roots, {
           now,
           cooldowns,

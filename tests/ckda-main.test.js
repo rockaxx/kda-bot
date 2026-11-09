@@ -855,6 +855,34 @@ test("MAIN commands update Premium state, configure effects, clear cooldowns, an
   installation.cleanup();
 });
 
+test("MAIN applies Design Mode rank command and cleanup restores the native rank", () => {
+  const roots = installerRoots();
+  const rankWrapper = { visible: true, toGlobal: () => ({ x: 10, y: 20 }) };
+  roots.user.ship.rankLogo = { wrapper: rankWrapper };
+  const windowRef = installerWindow(roots);
+  const frames = new Map();
+  let frameId = 0;
+  const image = { style: {}, isConnected: false, remove() { this.isConnected = false; } };
+  windowRef.document = {
+    body: { appendChild(node) { node.isConnected = true; } },
+    createElement() { return image; }
+  };
+  windowRef.requestAnimationFrame = (fn) => { frames.set(++frameId, fn); return frameId; };
+  windowRef.cancelAnimationFrame = (id) => frames.delete(id);
+  const installation = installCkda(windowRef);
+
+  windowRef.command({ type: "set-design-rank", rankId: 12 });
+  assert.equal(image.src, "https://unsmod.eu/spacemap/ui/rank/12/0.png");
+  image.onload();
+  const callback = [...frames.values()][0];
+  frames.clear();
+  callback();
+  assert.equal(rankWrapper.visible, false);
+  installation.cleanup();
+  assert.equal(rankWrapper.visible, true);
+  assert.equal(image.isConnected, false);
+});
+
 test("MAIN pagehide restores hooks and Premium, stops publisher, and removes command listener once", () => {
   assert.equal(typeof installCkda, "function");
   const roots = installerRoots();
@@ -937,7 +965,7 @@ test("effect configuration preserves active cooldown endpoints until an explicit
 test("manifest MAIN scripts auto-install once even when the entry point is evaluated twice", () => {
   const windowRef = installerWindow(installerRoots());
   const context = vm.createContext({ window: windowRef, TextEncoder });
-  for (const name of ["namespace-main.js", "ckda-schema.js", "ckda-core.js", "ckda-main.js", "ckda-main.js"]) {
+  for (const name of ["namespace-main.js", "ckda-schema.js", "ckda-core.js", "design-main.js", "ckda-main.js", "ckda-main.js"]) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../src", name), "utf8"), context);
   }
   assert.equal(windowRef.count("message"), 1);
