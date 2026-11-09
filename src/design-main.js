@@ -96,6 +96,7 @@
     function render() {
       frameId = null;
       if (stopped || rankId === 0) return restoreNative();
+      if (failed) return restoreNative();
       connectImage();
       const wrapper = rankWrapperFromRoots(getRoots());
       const point = loaded && !failed ? project(wrapper) : null;
@@ -124,6 +125,8 @@
     image.onerror = () => {
       loaded = false;
       failed = true;
+      if (frameId !== null) cancelFrame(frameId);
+      frameId = null;
       restoreNative();
     };
 

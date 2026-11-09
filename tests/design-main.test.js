@@ -93,6 +93,7 @@ test("rank override restores native rank on Default, load error, and root replac
   value.tick();
   assert.equal(value.rankWrapper.visible, true);
   assert.equal(value.image.style.display, "none");
+  assert.equal(value.frames.size, 0, "failed image must not leave a redraw loop running");
 
   controller.setRank(9);
   value.image.onload();
