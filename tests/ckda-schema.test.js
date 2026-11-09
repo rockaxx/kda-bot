@@ -145,3 +145,20 @@ test("C-KDA command schema strictly allows teardown and renew-lease without acti
     ]) assert.equal(validateCkdaEnvelope({ ...envelope, payload }).ok, false);
   }
 });
+
+test("C-KDA command schema strictly validates Design Mode rank commands", () => {
+  const envelope = {
+    channel: CKDA_CHANNEL,
+    direction: "command",
+    payload: { requestId: 1, type: "set-design-rank", rankId: 20 }
+  };
+  assert.equal(validateCkdaEnvelope(envelope).ok, true);
+  for (const payload of [
+    { requestId: 1, type: "set-design-rank", rankId: -1 },
+    { requestId: 1, type: "set-design-rank", rankId: 21 },
+    { requestId: 1, type: "set-design-rank", rankId: "20" },
+    { requestId: 1, type: "set-design-rank", rankId: 20, extra: true }
+  ]) {
+    assert.equal(validateCkdaEnvelope({ ...envelope, payload }).ok, false);
+  }
+});

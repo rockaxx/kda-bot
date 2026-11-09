@@ -25,6 +25,7 @@ const expectedScripts = {
     "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",
+    "src/design-settings.js",
     "src/ckda-core.js",
     "src/ckda-bridge.js",
     "src/ckda-canvas.js",

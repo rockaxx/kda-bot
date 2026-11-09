@@ -20,6 +20,7 @@
   const PREMIUM_STATES = new Set(["inactive", "active", "unsupported"]);
   const COMMAND_FIELDS = Object.freeze({
     "set-premium": ["enabled"],
+    "set-design-rank": ["rankId"],
     "configure-effects": ["empCooldownMs", "ishCooldownMs"],
     clear: [], refresh: [], teardown: [], "renew-lease": []
   });
@@ -165,6 +166,10 @@
           }
           if (payload.type === "set-premium" && typeof payload.enabled !== "boolean") {
             errors.push("enabled is invalid");
+          }
+          if (payload.type === "set-design-rank" &&
+              (!Number.isInteger(payload.rankId) || payload.rankId < 0 || payload.rankId > 20)) {
+            errors.push("rankId is invalid");
           }
           if (payload.type === "configure-effects" && fields.some(key =>
             !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000

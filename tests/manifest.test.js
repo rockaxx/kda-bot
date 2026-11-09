@@ -152,9 +152,9 @@ test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
     "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",
+    "src/design-settings.js",
     "src/ckda-core.js",
-    "src/ckda-bridge.js",
-    "src/ckda-canvas.js"
+    "src/ckda-bridge.js"
   ]);
   assert.ok(isolated.js.indexOf("src/ckda-canvas.js") < isolated.js.indexOf("src/overlay.js"));
   assert.ok(isolated.js.indexOf("src/ckda-bridge.js") < isolated.js.indexOf("src/content.js"));
