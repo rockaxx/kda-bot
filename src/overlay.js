@@ -22,6 +22,7 @@
     ["allyColor", "Ally colour", "color"],
     ["enemyColor", "Enemy colour", "color"],
     ["sizePx", "Marker size", "number"],
+    ["refreshFps", "Marker refresh", "select"],
     ["opacity", "Opacity", "number"],
     ["showEmpCooldown", "Show EMP", "checkbox"],
     ["empCooldownMs", "EMP duration ms", "number"],
@@ -81,7 +82,7 @@
           continue;
         }
         const raw = inputs[key].value.trim();
-        result[key] = type === "number" ? Number(raw) : raw;
+        result[key] = type === "number" || key === "refreshFps" ? Number(raw) : raw;
       }
       return result;
     }
@@ -234,6 +235,7 @@
     onStop,
     onSave,
     onSaveCkda = () => false,
+    onPreviewCkda = () => {},
     onSaveDesign = () => false,
     onSaveLoadingImage = () => false,
     onResetLoadingImage = () => false,
@@ -288,10 +290,12 @@
         color: #fb7185; background: rgba(225,29,72,.13); font-size: 16px; }
       .mode-name { font-size: 13px; font-weight: 800; color: #fff1f2; overflow-wrap: anywhere; }
       .mode-reason { color: #a4777f; font-size: 10px; overflow-wrap: anywhere; }
+      .ckda-mascot { position: fixed; z-index: 2147483647; top: -6px; right: 340px;
+        width: 64px; height: 44px; object-fit: contain; pointer-events: none;
+        filter: drop-shadow(0 4px 7px rgba(0,0,0,.7)) drop-shadow(0 0 7px rgba(225,29,72,.45)); }
       .ckda-visual { display: flex; align-items: center; gap: 10px; margin-bottom: 11px;
         padding: 9px 10px; border: 1px solid rgba(244,63,94,.16); border-radius: 11px;
         background: rgba(29,7,13,.54); color: #a4777f; font-size: 10px; }
-      .ckda-visual img { width: 46px; height: 32px; object-fit: contain; flex: none; }
       .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 11px 0; }
       button.action { min-height: 39px; border: 0; border-radius: 10px; cursor: pointer;
         color: white; font: inherit; font-weight: 850; letter-spacing: .03em;
@@ -399,7 +403,9 @@
       if (type === "select") {
         const options = key === "displayMode"
           ? [["masked-only", "Masked only"], ["all", "All players"]]
-          : [["circle", "Circle"], ["square", "Square"], ["triangle", "Triangle"], ["plus", "Plus"], ["star", "Star"]];
+          : key === "refreshFps"
+            ? [["30", "30 FPS"], ["60", "60 FPS"]]
+            : [["circle", "Circle"], ["square", "Square"], ["triangle", "Triangle"], ["plus", "Plus"], ["star", "Star"]];
         for (const [value, text] of options) {
           const option = documentRef.createElement("option");
           option.value = value;
@@ -418,6 +424,11 @@
       ckdaFields.appendChild(field);
     }
     const ckdaForm = createCkdaFormState(ckdaInputs);
+    const previewCkda = () => onPreviewCkda(ckdaForm.readSettings());
+    for (const input of Object.values(ckdaInputs)) {
+      input.addEventListener("input", previewCkda);
+      input.addEventListener("change", previewCkda);
+    }
 
     const designInputs = {};
     const rankSelect = documentRef.createElement("select");
@@ -514,31 +525,27 @@
     const ckdaView = documentRef.createElement("div");
     ckdaView.className = "view";
     ckdaView.dataset.view = "ckda";
-    const ckdaVisual = documentRef.createElement("div");
-    ckdaVisual.className = "ckda-visual";
     const ckdaImage = documentRef.createElement("img");
+    ckdaImage.className = "ckda-mascot";
     ckdaImage.alt = "C-KDA";
-    const ckdaImageFallback = documentRef.createElement("span");
-    ckdaImageFallback.textContent = "C-KDA visual unavailable";
+    let ckdaImageFailed = false;
     const ckdaAssetUrl = typeof chrome !== "undefined" && chrome.runtime &&
       typeof chrome.runtime.getURL === "function"
       ? chrome.runtime.getURL("assets/c-kda.gif")
       : "";
     if (ckdaAssetUrl) {
       ckdaImage.src = ckdaAssetUrl;
-      ckdaImageFallback.hidden = true;
     } else {
       ckdaImage.hidden = true;
     }
     ckdaImage.addEventListener("error", () => {
+      ckdaImageFailed = true;
       ckdaImage.hidden = true;
-      ckdaImageFallback.hidden = false;
     });
-    ckdaVisual.append(ckdaImage, ckdaImageFallback);
     const ckdaTitle = documentRef.createElement("div");
     ckdaTitle.className = "section-title";
     ckdaTitle.textContent = "Player marker controls";
-    ckdaView.append(ckdaVisual, ckdaTitle, ckdaFields);
+    ckdaView.append(ckdaTitle, ckdaFields);
     const ckdaControls = documentRef.createElement("div");
     ckdaControls.className = "controls";
     const saveCkdaButton = makeButton("SAVE C-KDA", "action", ckdaControls);
@@ -627,7 +634,7 @@
     const exportButton = makeButton("Export data", "export", footer);
     footer.prepend(hint);
     panel.appendChild(footer);
-    shadow.append(style, panel);
+    shadow.append(style, panel, ckdaImage);
     const stopMountGuard = keepHostMounted(documentRef, host);
 
     let lastModel = {};
@@ -635,6 +642,7 @@
     function syncPanelState() {
       const current = tabState.read();
       panel.hidden = !current.visible;
+      ckdaImage.hidden = !current.visible || !ckdaAssetUrl || ckdaImageFailed;
       for (const name of Object.keys(tabButtons)) {
         tabButtons[name].classList.toggle("active", current.activeTab === name);
       }

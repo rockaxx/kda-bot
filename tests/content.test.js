@@ -248,7 +248,8 @@ test("content loads independent C-KDA defaults and initializes MAIN settings", (
   assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings", "designSettings", "loadingScreenImage"]);
   assert.equal(app.model().ckdaSettings.empCooldownMs, 28000);
   assert.equal(app.model().ckdaSettings.premiumOverride, false);
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+  assert.equal(app.calls.commands[2].payload.fps, 60);
 });
 
 test("Design Mode stores supported loading image and resets to Besto", async () => {
@@ -413,9 +414,10 @@ test("late MAIN readiness resends persisted C-KDA configuration without BOT life
   assert.equal(app.model().ckdaSettings.sizePx, 8);
   app.calls.commands.length = 0;
   app.result({ type: "ready" });
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
   assert.equal(app.calls.commands[0].payload.empCooldownMs, 15000);
-  assert.equal(app.calls.commands[1].payload.enabled, true);
+  assert.equal(app.calls.commands[1].payload.fps, 60);
+  assert.equal(app.calls.commands[2].payload.enabled, true);
   assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 

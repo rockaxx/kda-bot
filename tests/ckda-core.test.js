@@ -116,6 +116,23 @@ test("projects 1.9.0.052 ships through their root wrapper", () => {
   assert.deepEqual(projectPlayer(entity), { screenX: 321.25, screenY: 654.5 });
 });
 
+test("projects current-client world coordinates through the live world transform", () => {
+  const entity = {
+    x: 10599,
+    y: 6500,
+    wrapper: { toGlobal: () => ({ x: 10599, y: 6500 }) }
+  };
+  const roots = {
+    world: {
+      world: {
+        worldTransform: { a: 0.5, b: 0, c: 0, d: 0.5, tx: -4300, ty: -2800 }
+      }
+    }
+  };
+
+  assert.deepEqual(projectPlayer(entity, roots), { screenX: 999.5, screenY: 450 });
+});
+
 test("filters visible cloaked players without changing input records", () => {
   const players = [
     { id: 1, screenX: 20, screenY: 20, cloaked: true, observedAt: 900 },

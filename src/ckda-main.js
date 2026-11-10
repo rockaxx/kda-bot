@@ -378,7 +378,7 @@
       const players = [];
       ships.forEach((entity) => {
         const relation = dependency.classifyPlayer(entity, roots);
-        const projection = relation && dependency.projectPlayer(entity);
+        const projection = relation && dependency.projectPlayer(entity, roots);
         if (!projection) return;
         const cooldown = cooldowns.read(entity.ID) || {};
         players.push({
@@ -421,6 +421,7 @@
         ? options.premiumState : "inactive";
     let stopped = false;
     let timer = null;
+    let refreshFps = options.refreshFps === 30 ? 30 : 60;
     let lastWorld = roots && roots.world;
     let lastMapId = Number(lastWorld && lastWorld.mapId);
     let playerCursor = 0;
@@ -487,10 +488,21 @@
       }
     }
 
-    refresh();
-    if (windowRef && typeof windowRef.setInterval === "function") {
-      timer = windowRef.setInterval(refresh, 100);
+    function schedule(fps = refreshFps) {
+      const nextFps = fps === 30 ? 30 : 60;
+      if (timer !== null && windowRef && typeof windowRef.clearInterval === "function") {
+        windowRef.clearInterval(timer);
+      }
+      refreshFps = nextFps;
+      timer = null;
+      if (windowRef && typeof windowRef.setInterval === "function") {
+        timer = windowRef.setInterval(refresh, 1000 / refreshFps);
+      }
+      return refreshFps;
     }
+
+    refresh();
+    schedule();
 
     function stop() {
       if (stopped) return false;
@@ -506,7 +518,7 @@
       return true;
     }
 
-    return { stop, refresh, clear };
+    return { stop, refresh, clear, setFps: schedule };
   }
 
   function validatedCommand(event, windowRef) {
@@ -570,6 +582,8 @@
         } else if (command.type === "configure-effects") {
           effects = { empCooldownMs: command.empCooldownMs, ishCooldownMs: command.ishCooldownMs };
           updateHooks(true);
+        } else if (command.type === "configure-refresh") {
+          publisher.setFps(command.fps);
         } else if (command.type === "clear") {
           publisher.clear();
         } else if (command.type === "set-design-rank") {

@@ -109,10 +109,11 @@ function validSettings(overrides = {}) {
   };
 }
 
-function createDom() {
+function createDom(options = {}) {
   const context = recordingContext();
   const canvas = {
     id: "",
+    dataset: {},
     style: {},
     width: 0,
     height: 0,
@@ -136,19 +137,92 @@ function createDom() {
     rafCount() { return rafs.size; },
     listenerCount() { return listeners.size; }
   };
+  const overlayParent = {
+    append(value) { this.child = value; value.isConnected = true; }
+  };
+  const gameCanvases = Array.isArray(options.gameCanvases)
+    ? options.gameCanvases
+    : (options.gameCanvas ? [options.gameCanvas] : []);
   return {
     documentRef: {
       body: { append(canvas) { this.child = canvas; canvas.isConnected = true; } },
-      createElement(tag) { assert.equal(tag, "canvas"); return canvas; }
+      documentElement: overlayParent,
+      createElement(tag) { assert.equal(tag, "canvas"); return canvas; },
+      getElementsByTagName(tag) {
+        assert.equal(tag, "canvas");
+        return [...gameCanvases, canvas];
+      }
     },
     windowRef,
     now: () => epochNow,
     setNow(value) { epochNow = value; },
     context,
     canvas,
+    overlayParent,
     detachCanvas() { canvas.isConnected = false; }
   };
 }
+
+test("prioritizes the authoritative gamemap canvas over unrelated larger canvases", () => {
+  const uiCanvas = {
+    id: "ui-effects",
+    isConnected: true,
+    width: 2000,
+    height: 2000,
+    getBoundingClientRect() {
+      return { left: 1000, top: 0, width: 900, height: 900 };
+    }
+  };
+  const gameCanvas = {
+    id: "gamemap",
+    isConnected: true,
+    width: 1920,
+    height: 911,
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: 1920, height: 911 };
+    }
+  };
+  const dom = createDom({ gameCanvases: [uiCanvas, gameCanvas] });
+  const canvas = createCkdaCanvas(dom);
+  canvas.render(validSnapshot(), validSettings({ displayMode: "all" }));
+
+  dom.windowRef.runFrame(1000);
+
+  assert.equal(dom.canvas.style.left, "0px");
+  assert.equal(dom.canvas.style.width, "1920px");
+  assert.equal(dom.canvas.style.height, "911px");
+});
+
+test("canvas escapes the game body and maps backing-store coordinates to the live PIXI canvas", () => {
+  const gameCanvas = {
+    id: "game",
+    isConnected: true,
+    width: 2560,
+    height: 1440,
+    getBoundingClientRect() {
+      return { left: 40, top: 20, width: 1280, height: 720 };
+    }
+  };
+  const dom = createDom({ gameCanvas });
+  const canvas = createCkdaCanvas(dom);
+  const snapshot = validSnapshot();
+  snapshot.players[0].screenX = 2000;
+  snapshot.players[0].screenY = 1000;
+  canvas.render(snapshot, validSettings({ displayMode: "all" }));
+
+  dom.windowRef.runFrame(1000);
+
+  assert.equal(dom.overlayParent.child, dom.canvas, "overlay must not inherit the game body stacking context");
+  assert.equal(dom.canvas.style.left, "40px");
+  assert.equal(dom.canvas.style.top, "20px");
+  assert.equal(dom.canvas.style.width, "1280px");
+  assert.equal(dom.canvas.style.height, "720px");
+  assert.deepEqual(
+    dom.context.calls.find(([name]) => name === "arc").slice(1, 3),
+    [1000, 500]
+  );
+  canvas.destroy();
+});
 
 test("canvas reconnects after the game replaces its loading DOM", () => {
   const dom = createDom();
@@ -267,6 +341,7 @@ test("canvas uses viewport DPI, ignores input, filters masked/stale data, and la
   assert.equal(dom.canvas.height, 960);
   assert.deepEqual(dom.context.calls.find(([name]) => name === "setTransform"), ["setTransform", 2, 0, 0, 2, 0, 0]);
   assert.deepEqual(dom.context.calls.find(([name]) => name === "fillText"), ["fillText", "EMP 3", 110, 194]);
+  assert.equal(JSON.parse(dom.canvas.dataset.ckdaRender).reason, "drawn");
 
   dom.context.calls.length = 0;
   const unmasked = validSnapshot(1000);
@@ -274,6 +349,7 @@ test("canvas uses viewport DPI, ignores input, filters masked/stale data, and la
   canvas.render(unmasked, validSettings({ displayMode: "masked-only" }));
   dom.windowRef.runFrame(1000);
   assert.equal(dom.context.calls.some(([name]) => name === "arc"), false, "masked-only must hide unmasked players");
+  assert.equal(JSON.parse(dom.canvas.dataset.ckdaRender).reason, "filtered");
 
   dom.context.calls.length = 0;
   canvas.render(validSnapshot(1000), validSettings({ displayMode: "masked-only" }));

@@ -91,13 +91,39 @@
 
     const canvas = documentRef.createElement("canvas");
     canvas.id = CANVAS_ID;
-    Object.assign(canvas.style, {
+    const baseStyle = {
       position: "fixed",
-      inset: "0",
+      left: "0px",
+      top: "0px",
+      display: "block",
+      visibility: "visible",
+      opacity: "1",
       pointerEvents: "none",
-      zIndex: "2147483647"
-    });
-    documentRef.body.append(canvas);
+      zIndex: "2147483647",
+      transform: "translateZ(0)",
+      isolation: "isolate"
+    };
+    Object.assign(canvas.style, baseStyle);
+    if (typeof canvas.style.setProperty === "function") {
+      for (const [name, value] of Object.entries({
+        position: baseStyle.position,
+        left: baseStyle.left,
+        top: baseStyle.top,
+        display: baseStyle.display,
+        visibility: baseStyle.visibility,
+        opacity: baseStyle.opacity,
+        "pointer-events": baseStyle.pointerEvents,
+        "z-index": baseStyle.zIndex,
+        transform: baseStyle.transform,
+        isolation: baseStyle.isolation
+      })) canvas.style.setProperty(name, value, "important");
+    }
+    const overlayParent = documentRef.documentElement || documentRef.body;
+    const appendOverlay = () => {
+      if (typeof overlayParent.append === "function") overlayParent.append(canvas);
+      else overlayParent.appendChild?.(canvas);
+    };
+    appendOverlay();
     const context = canvas.getContext("2d");
     let latestSnapshot = null;
     let latestSettings = null;
@@ -109,12 +135,51 @@
       if (
         !destroyed &&
         canvas.isConnected === false &&
-        documentRef.body &&
-        typeof documentRef.body.append === "function"
+        overlayParent
       ) {
-        documentRef.body.append(canvas);
+        appendOverlay();
       }
       return canvas.isConnected !== false;
+    }
+
+    function gameCanvas() {
+      if (typeof documentRef.getElementsByTagName !== "function") return null;
+      let candidates;
+      try {
+        candidates = Array.from(documentRef.getElementsByTagName("canvas"));
+      } catch (_) {
+        return null;
+      }
+      let best = null;
+      let bestScore = 0;
+      const viewportWidth = Math.max(1, Number(windowRef.innerWidth) || 1);
+      const viewportHeight = Math.max(1, Number(windowRef.innerHeight) || 1);
+      const viewportAspect = viewportWidth / viewportHeight;
+      for (const candidate of candidates) {
+        if (
+          !candidate ||
+          candidate === canvas ||
+          candidate.id === CANVAS_ID ||
+          candidate.isConnected === false ||
+          typeof candidate.getBoundingClientRect !== "function"
+        ) continue;
+        try {
+          const rect = candidate.getBoundingClientRect();
+          const width = Number(rect && rect.width);
+          const height = Number(rect && rect.height);
+          const area = width * height;
+          const aspectDelta = Math.abs(width / height - viewportAspect);
+          const gamePriority = candidate.id === "gamemap" ? 1e15 : 0;
+          const score = gamePriority + area / (1 + aspectDelta * 10);
+          if (Number.isFinite(score) && width > 0 && height > 0 && score > bestScore) {
+            best = { candidate, rect, width, height };
+            bestScore = score;
+          }
+        } catch (_) {
+          // Ignore transient loading canvases and keep searching.
+        }
+      }
+      return best;
     }
 
     function viewport() {
@@ -124,13 +189,36 @@
         ? windowRef.innerHeight : 0;
       const ratio = Number.isFinite(windowRef.devicePixelRatio) && windowRef.devicePixelRatio > 0
         ? windowRef.devicePixelRatio : 1;
-      return { width, height, ratio };
+      const game = gameCanvas();
+      if (!game) {
+        return { left: 0, top: 0, width, height, ratio, sourceWidth: width, sourceHeight: height };
+      }
+      const sourceWidth = Number(game.candidate.width);
+      const sourceHeight = Number(game.candidate.height);
+      return {
+        left: Number.isFinite(game.rect.left) ? game.rect.left : 0,
+        top: Number.isFinite(game.rect.top) ? game.rect.top : 0,
+        width: game.width,
+        height: game.height,
+        ratio,
+        sourceWidth: Number.isFinite(sourceWidth) && sourceWidth > 0 ? sourceWidth : game.width,
+        sourceHeight: Number.isFinite(sourceHeight) && sourceHeight > 0 ? sourceHeight : game.height
+      };
     }
 
     function resize() {
-      const { width, height, ratio } = viewport();
+      const surface = viewport();
+      const { left, top, width, height, ratio } = surface;
+      canvas.style.left = `${left}px`;
+      canvas.style.top = `${top}px`;
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
+      if (typeof canvas.style.setProperty === "function") {
+        canvas.style.setProperty("left", `${left}px`, "important");
+        canvas.style.setProperty("top", `${top}px`, "important");
+        canvas.style.setProperty("width", `${width}px`, "important");
+        canvas.style.setProperty("height", `${height}px`, "important");
+      }
       const backingWidth = Math.floor(width * ratio);
       const backingHeight = Math.floor(height * ratio);
       if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
@@ -140,7 +228,23 @@
       if (context && typeof context.setTransform === "function") {
         context.setTransform(ratio, 0, 0, ratio, 0, 0);
       }
-      return { width, height };
+      return surface;
+    }
+
+    function normalizePlayer(player, surface) {
+      const margin = 32;
+      const rawX = player.screenX;
+      const rawY = player.screenY;
+      const alreadyCss =
+        rawX >= -margin && rawX <= surface.width + margin &&
+        rawY >= -margin && rawY <= surface.height + margin;
+      if (alreadyCss) return player;
+      const scaleX = surface.width / Math.max(1, surface.sourceWidth);
+      const scaleY = surface.height / Math.max(1, surface.sourceHeight);
+      const scaledX = rawX * scaleX;
+      const scaledY = rawY * scaleY;
+      if (!Number.isFinite(scaledX) || !Number.isFinite(scaledY)) return player;
+      return { ...player, screenX: scaledX, screenY: scaledY };
     }
 
     function erase(viewportSize = resize()) {
@@ -198,11 +302,24 @@
         latestSnapshot.timestamp > timestamp ||
         timestamp - latestSnapshot.timestamp > STALE_AFTER_MS
       ) {
+        if (canvas.dataset) {
+          canvas.dataset.ckdaRender = JSON.stringify({
+            reason: !context ? "no-context" : !latestSnapshot ? "no-snapshot" :
+              !latestSettings ? "no-settings" : latestSettings.overlayEnabled !== true ? "overlay-disabled" :
+              latestSnapshot.connectionState !== "connected" ? "disconnected" :
+              timestamp === null ? "clock" : "stale-snapshot",
+            tracked: observations.size
+          });
+        }
         return;
       }
 
+      const projectedPlayers = Array.from(
+        observations.values(),
+        player => normalizePlayer(player, viewportSize)
+      );
       const players = dependency.filterVisiblePlayers(
-        Array.from(observations.values()),
+        projectedPlayers,
         latestSettings,
         timestamp,
         viewportSize,
@@ -221,6 +338,19 @@
           latestSettings.opacity
         );
         drawCooldown(player, latestSettings, timestamp);
+      }
+      if (canvas.dataset) {
+        canvas.dataset.ckdaRender = JSON.stringify({
+          reason: players.length ? "drawn" : "filtered",
+          tracked: observations.size,
+          drawn: players.length,
+          mode: latestSettings.displayMode,
+          raw: Array.from(observations.values()).slice(0, 4).map(player => [
+            player.id, player.screenX, player.screenY, player.cloaked, timestamp - player.observedAt
+          ]),
+          projected: projectedPlayers.slice(0, 4).map(player => [player.screenX, player.screenY]),
+          surface: [viewportSize.width, viewportSize.height, viewportSize.sourceWidth, viewportSize.sourceHeight]
+        });
       }
     }
 

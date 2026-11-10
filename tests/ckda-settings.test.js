@@ -13,6 +13,7 @@ test("C-KDA defaults keep Premium off", () => {
     allyColor: "#45d483",
     enemyColor: "#ff394f",
     sizePx: 8,
+    refreshFps: 60,
     opacity: 0.9,
     showEmpCooldown: true,
     showIshCooldown: true,
@@ -26,16 +27,19 @@ test("invalid C-KDA values fall back field by field", () => {
   const result = normalizeCkdaSettings({
     shape: "hex",
     sizePx: 500,
+    refreshFps: 20,
     premiumOverride: "yes"
   });
 
   assert.equal(result.value.shape, "circle");
   assert.equal(result.value.sizePx, 8);
+  assert.equal(result.value.refreshFps, 60);
   assert.equal(result.value.premiumOverride, false);
   assert.equal(result.ok, false);
   assert.deepEqual(result.errors, [
     "shape is invalid",
     "sizePx must be from 3 to 200",
+    "refreshFps must be 30 or 60",
     "premiumOverride must be a boolean"
   ]);
 });
@@ -48,6 +52,7 @@ test("normalizes every documented valid setting and drops unknown keys", () => {
     allyColor: "#ABCDEF",
     enemyColor: "#123456",
     sizePx: 200,
+    refreshFps: 30,
     opacity: 0.1,
     showEmpCooldown: false,
     showIshCooldown: false,
@@ -63,6 +68,7 @@ test("normalizes every documented valid setting and drops unknown keys", () => {
   assert.equal(result.value.shape, "star");
   assert.equal(result.value.allyColor, "#ABCDEF");
   assert.equal(result.value.sizePx, 200);
+  assert.equal(result.value.refreshFps, 30);
   assert.equal(result.value.opacity, 0.1);
   assert.equal(result.value.premiumOverride, true);
   assert.equal(Object.hasOwn(result.value, "ignored"), false);

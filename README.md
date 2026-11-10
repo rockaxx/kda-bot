@@ -7,7 +7,8 @@ legacy NPC bot implementation remains disabled and is not exposed in the UI.
 ## Features
 
 - C-KDA player markers with all-player or masked-only mode, five marker shapes,
-  ally/enemy colours, size, opacity, and EMP/ISH countdown labels.
+  ally/enemy colours, size, opacity, selectable 30/60 FPS position refresh, and
+  EMP/ISH countdown labels.
 - Client-local Premium presentation override. It does not grant or change any
   server entitlement and is restored on disable, navigation, or cleanup.
 - Visual rank selection from default through rank 20.
@@ -23,12 +24,12 @@ loading image. Images remain in the extension's local Chrome storage.
 
 ## Install a GitHub release
 
-1. Download `KDA-v0.2.0.zip` from the latest GitHub release.
+1. Download `KDA-v0.3.0.zip` from the latest GitHub release.
 2. Extract the ZIP. Do not select the ZIP itself in Chrome.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.
 5. Click **Load unpacked**.
-6. Select the extracted `KDA-v0.2.0` folder containing `manifest.json`.
+6. Select the extracted `KDA-v0.3.0` folder containing `manifest.json`.
 7. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 

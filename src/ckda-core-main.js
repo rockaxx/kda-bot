@@ -55,8 +55,39 @@
     return hasAllyRelation(entity.clanRelation) ? "ally" : "enemy";
   }
 
-  function projectPlayer(entity) {
+  function projectPlayer(entity, roots) {
+    try {
+      const worldTransform = roots && roots.world && roots.world.world &&
+        roots.world.world.worldTransform;
+      const worldX = Number(entity && entity.x);
+      const worldY = Number(entity && entity.y);
+      if (worldTransform && Number.isFinite(worldX) && Number.isFinite(worldY)) {
+        let point = null;
+        if (typeof worldTransform.apply === "function") {
+          point = worldTransform.apply({ x: worldX, y: worldY });
+        } else if (
+          Number.isFinite(worldTransform.a) &&
+          Number.isFinite(worldTransform.b) &&
+          Number.isFinite(worldTransform.c) &&
+          Number.isFinite(worldTransform.d) &&
+          Number.isFinite(worldTransform.tx) &&
+          Number.isFinite(worldTransform.ty)
+        ) {
+          point = {
+            x: worldTransform.a * worldX + worldTransform.c * worldY + worldTransform.tx,
+            y: worldTransform.b * worldX + worldTransform.d * worldY + worldTransform.ty
+          };
+        }
+        if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+          return { screenX: point.x, screenY: point.y };
+        }
+      }
+    } catch (_) {
+      // Fall back to compatible display-object projection paths.
+    }
+
     const displayObjects = [
+      entity && entity.uiWrapper,
       entity && entity.wrapper,
       entity && entity.renderer && entity.renderer.wrapper
     ];

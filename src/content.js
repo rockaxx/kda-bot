@@ -152,6 +152,7 @@
         empCooldownMs: ckdaSettings.empCooldownMs,
         ishCooldownMs: ckdaSettings.ishCooldownMs
       });
+      ckdaBridge.sendCommand("configure-refresh", { fps: ckdaSettings.refreshFps });
       ckdaBridge.sendCommand("set-premium", { enabled: ckdaSettings.premiumOverride });
       ckdaBridge.sendCommand("set-design-rank", { rankId: designSettings.rankId });
       ckdaBridge.sendCommand("set-design-ship", { shipDesign: designSettings.shipDesign });
@@ -244,6 +245,18 @@
         } finally {
           ckdaSaving = false;
         }
+      },
+      onPreviewCkda(rawSettings) {
+        const candidate = api.normalizeCkdaSettings(rawSettings);
+        if (!candidate.ok) return false;
+        const refreshChanged = candidate.value.refreshFps !== ckdaSettings.refreshFps;
+        ckdaSettings = candidate.value;
+        if (refreshChanged) {
+          try { ckdaBridge.sendCommand("configure-refresh", { fps: ckdaSettings.refreshFps }); }
+          catch (_) { ckdaStatus = { state: "error" }; return false; }
+        }
+        ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
+        return true;
       },
       async onSaveDesign(rawSettings) {
         if (unloaded) return false;

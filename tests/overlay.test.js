@@ -186,6 +186,7 @@ test("C-KDA drafts survive telemetry renders until successful save", () => {
   for (const [key, type] of [
     ["overlayEnabled", "checkbox"], ["displayMode", "select"], ["shape", "select"],
     ["allyColor", "color"], ["enemyColor", "color"], ["sizePx", "number"],
+    ["refreshFps", "select"],
     ["opacity", "number"], ["showEmpCooldown", "checkbox"],
     ["showIshCooldown", "checkbox"], ["empCooldownMs", "number"],
     ["ishCooldownMs", "number"], ["premiumOverride", "checkbox"]
@@ -205,6 +206,7 @@ test("C-KDA drafts survive telemetry renders until successful save", () => {
     allyColor: "#45d483",
     enemyColor: "#ff394f",
     sizePx: 8,
+    refreshFps: 60,
     opacity: 0.9,
     showEmpCooldown: true,
     showIshCooldown: true,
@@ -326,7 +328,7 @@ test("C-KDA controls bind every label and expose schema-aligned numeric bounds",
       onExport() {}
     });
     const controls = elements.filter((element) => element.dataset.ckdaSetting);
-    assert.equal(controls.length, 12);
+    assert.equal(controls.length, 13);
     for (const control of controls) {
       assert.ok(control.id, `${control.dataset.ckdaSetting} needs an id`);
       assert.ok(
@@ -354,7 +356,37 @@ test("C-KDA controls bind every label and expose schema-aligned numeric bounds",
   }
 });
 
-test("C-KDA visual uses packaged runtime URL and reveals text on image failure", () => {
+test("C-KDA marker controls preview immediately without requiring save", () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  const previews = [];
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({
+      documentRef,
+      onPreviewCkda(value) { previews.push(value); }
+    });
+    const defaults = require("../src/ckda-settings.js").CKDA_DEFAULT_SETTINGS;
+    for (const input of elements.filter(element => element.dataset.ckdaSetting)) {
+      const value = defaults[input.dataset.ckdaSetting];
+      if (input.type === "checkbox") input.checked = value;
+      else input.value = String(value);
+    }
+    const displayMode = elements.find(element => element.dataset.ckdaSetting === "displayMode");
+    const overlayEnabled = elements.find(element => element.dataset.ckdaSetting === "overlayEnabled");
+    displayMode.value = "all";
+    overlayEnabled.checked = true;
+    displayMode.listeners.change();
+
+    assert.equal(previews.at(-1).displayMode, "all");
+    assert.equal(previews.at(-1).overlayEnabled, true);
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
+});
+
+test("C-KDA mascot uses packaged runtime URL, sits outside content flow, and hides on failure", () => {
   const originalChrome = global.chrome;
   const urls = [];
   const originalObserver = global.MutationObserver;
@@ -364,14 +396,13 @@ test("C-KDA visual uses packaged runtime URL and reveals text on image failure",
     const { documentRef, elements } = createOverlayDocument();
     const overlay = createOverlay({ documentRef });
     const image = elements.find((element) => element.tagName === "IMG");
-    const fallback = elements.find((element) => element.textContent === "C-KDA visual unavailable");
 
     assert.deepEqual(urls, ["assets/c-kda.gif"]);
     assert.equal(image.src, "chrome-extension://test/assets/c-kda.gif");
-    assert.equal(fallback.hidden, true);
+    assert.equal(image.className, "ckda-mascot");
+    assert.equal(image.hidden, false);
     image.listeners.error();
     assert.equal(image.hidden, true);
-    assert.equal(fallback.hidden, false);
     overlay.destroy();
   } finally {
     if (originalChrome === undefined) delete global.chrome;

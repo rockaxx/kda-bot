@@ -559,6 +559,32 @@ test("publishes only projected remote players in a sanitized C-KDA snapshot", ()
   });
 });
 
+test("snapshot projects current-client ship coordinates through the live world root", () => {
+  const roots = liveRoots();
+  roots.world.world = {
+    worldTransform: { a: 0.5, b: 0, c: 0, d: 0.5, tx: -4300, ty: -2800 }
+  };
+  roots.world.MAP_SHIPS.get(8).x = 10599;
+  roots.world.MAP_SHIPS.get(8).y = 6500;
+  roots.world.MAP_SHIPS.get(9).x = 10453;
+  roots.world.MAP_SHIPS.get(9).y = 6797;
+
+  const snapshot = createCkdaSnapshot(
+    roots,
+    { read() { return { empEndsAt: null, ishEndsAt: null }; } },
+    "inactive",
+    1234
+  );
+
+  assert.deepEqual(
+    snapshot.players.map(({ id, screenX, screenY }) => ({ id, screenX, screenY })),
+    [
+      { id: 8, screenX: 999.5, screenY: 450 },
+      { id: 9, screenX: 926.5, screenY: 598.5 }
+    ]
+  );
+});
+
 test("fails closed for malformed client version, disconnected network, and invalid roots", () => {
   const cooldowns = { read() { return { empEndsAt: null, ishEndsAt: null }; } };
 
@@ -605,7 +631,7 @@ test("publisher sends on cadence, clears cooldowns on world change, and stops", 
     now: () => 1234
   });
 
-  assert.equal(scheduled.delay, 100);
+  assert.equal(scheduled.delay, 1000 / 60);
   assert.equal(messages.length, 1);
   assert.deepEqual(messages[0], {
     channel: "sa-ckda-v1",
@@ -616,6 +642,9 @@ test("publisher sends on cadence, clears cooldowns on world change, and stops", 
   assert.equal(messages.length, 2);
   publisher.refresh();
   assert.equal(messages.length, 3);
+
+  publisher.setFps(30);
+  assert.equal(scheduled.delay, 1000 / 30);
 
   roots.world = { ...roots.world, mapId: 18 };
   publisher.refresh();
@@ -819,6 +848,7 @@ test("MAIN commands reject foreign sources, wrong channels, and malformed comman
     { type: "set-premium", enabled: true, requestId: -1 },
     { type: "configure-effects", empCooldownMs: 0, ishCooldownMs: 28000 },
     { type: "configure-effects", empCooldownMs: 28000, ishCooldownMs: Infinity },
+    { type: "configure-refresh", fps: 15 },
     { type: "refresh", extra: true }, { type: "attack", targetId: 8 }
   ]) windowRef.command(payload);
   windowRef.command({}, { data: { channel: "sa-bot-v1", direction: "command", payload: { requestId: 1, type: "set-premium", enabled: true } } });
@@ -837,6 +867,8 @@ test("MAIN commands update Premium state, configure effects, clear cooldowns, an
   assert.equal(roots.user.isPremium, true);
   assert.equal(windowRef.snapshot().premiumState, "active");
   windowRef.command({ type: "configure-effects", empCooldownMs: 1000, ishCooldownMs: 120000 });
+  windowRef.command({ type: "configure-refresh", fps: 30 });
+  assert.ok([...windowRef.delays.values()].includes(1000 / 30));
   const before = Date.now();
   roots.world.addEmpNew({ ID: 8 });
   roots.world.hiddenIsh({ ID: 8 });

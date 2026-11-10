@@ -30,6 +30,7 @@
     "set-design-rank": ["rankId"],
     "set-design-ship": ["shipDesign"],
     "configure-effects": ["empCooldownMs", "ishCooldownMs"],
+    "configure-refresh": ["fps"],
     clear: [], refresh: [], teardown: [], "renew-lease": []
   });
   const CKDA_COMMAND_TYPES = Object.freeze(Object.keys(COMMAND_FIELDS));
@@ -185,6 +186,10 @@
           if (payload.type === "configure-effects" && fields.some(key =>
             !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000
           )) errors.push("effect duration is invalid");
+          if (payload.type === "configure-refresh" &&
+              payload.fps !== 30 && payload.fps !== 60) {
+            errors.push("refresh fps is invalid");
+          }
         }
         if (!Number.isSafeInteger(payload.requestId) || payload.requestId < 1) {
           errors.push("requestId is invalid");
