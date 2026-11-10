@@ -59,10 +59,10 @@ test("selects NPCs on whichever map is currently active", () => {
   assert.equal(actions[1].entityId, "map-8-npc");
 });
 
-test("accepts the current client version", () => {
+test("accepts a future four-part client version", () => {
   const controller = createController({ settings, now: () => 1000 });
   controller.start();
-  controller.update(snapshot({ clientVersion: "1.9.0.052" }));
+  controller.update(snapshot({ clientVersion: "1.9.0.7777" }));
 
   assert.equal(controller.getState().name, "SEARCHING");
   assert.notEqual(controller.getState().reason, "unsupported-client-version");

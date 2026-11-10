@@ -27,10 +27,13 @@ test("Design Mode accepts only integer rank IDs from 0 through 20", () => {
     assert.deepEqual(result.errors, ["rankId must be an integer from 0 to 20"]);
   }
 });
-test("Design Mode accepts only default and Bastion ship designs", () => {
+test("Design Mode exposes and accepts Goliath ship designs", () => {
+  assert.ok(designApi.SHIP_DESIGN_OPTIONS.length >= 20);
   assert.deepEqual(designApi.normalizeDesignSettings({ shipDesign: "bastion" }).value,
     { rankId: 0, shipDesign: "bastion" });
-  const invalid = designApi.normalizeDesignSettings({ shipDesign: "surgeon" });
+  assert.deepEqual(designApi.normalizeDesignSettings({ shipDesign: "regalia" }).value,
+    { rankId: 0, shipDesign: "regalia" });
+  const invalid = designApi.normalizeDesignSettings({ shipDesign: "unknown" });
   assert.equal(invalid.ok, false);
   assert.deepEqual(invalid.value, { rankId: 0, shipDesign: "default" });
 });

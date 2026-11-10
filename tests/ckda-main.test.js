@@ -314,10 +314,10 @@ test("Premium override refresh restores replaced user root and supports repeated
   assert.deepEqual(secondCalls, [true, false, true, false]);
 });
 
-test("Premium override refuses incompatible roots without mutation", () => {
+test("Premium override refuses malformed client version without mutation", () => {
   const user = { isPremium: false, updatePremium() {} };
   const original = Object.getOwnPropertyDescriptor(user, "isPremium");
-  const controller = createPremiumOverride(premiumRoots(user, "1.9.0.053"), {});
+  const controller = createPremiumOverride(premiumRoots(user, "future"), {});
 
   assert.equal(controller.enable(), false);
   assert.equal(controller.state(), "unsupported");
@@ -559,11 +559,11 @@ test("publishes only projected remote players in a sanitized C-KDA snapshot", ()
   });
 });
 
-test("fails closed for unsupported client, disconnected network, and invalid roots", () => {
+test("fails closed for malformed client version, disconnected network, and invalid roots", () => {
   const cooldowns = { read() { return { empEndsAt: null, ishEndsAt: null }; } };
 
   assert.equal(
-    createCkdaSnapshot(liveRoots({ version: "1.9.0.053" }), cooldowns, "inactive", 1),
+    createCkdaSnapshot(liveRoots({ version: "future" }), cooldowns, "inactive", 1),
     null
   );
   assert.equal(
@@ -857,30 +857,32 @@ test("MAIN commands update Premium state, configure effects, clear cooldowns, an
 
 test("MAIN applies Design Mode rank command and cleanup restores the native rank", () => {
   const roots = installerRoots();
-  const rankWrapper = { visible: true, toGlobal: () => ({ x: 10, y: 20 }) };
-  roots.user.ship.rankLogo = { wrapper: rankWrapper };
+  roots.version = "n1.9.0.0996";
+  roots.user.ship.rank = 5;
+  const rankCalls = [];
+  roots.user.ship.setRank = function setRank(value) { rankCalls.push(value); this.rank = value; };
   const windowRef = installerWindow(roots);
-  const frames = new Map();
-  let frameId = 0;
-  const image = { style: {}, isConnected: false, remove() { this.isConnected = false; } };
-  windowRef.document = {
-    body: { appendChild(node) { node.isConnected = true; } },
-    createElement() { return image; }
-  };
-  windowRef.requestAnimationFrame = (fn) => { frames.set(++frameId, fn); return frameId; };
-  windowRef.cancelAnimationFrame = (id) => frames.delete(id);
   const installation = installCkda(windowRef);
 
   windowRef.command({ type: "set-design-rank", rankId: 12 });
-  assert.equal(image.src, "https://unsmod.eu/spacemap/ui/rank/12/0.png");
-  image.onload();
-  const callback = [...frames.values()][0];
-  frames.clear();
-  callback();
-  assert.equal(rankWrapper.visible, false);
+  assert.deepEqual(rankCalls, [12]);
   installation.cleanup();
-  assert.equal(rankWrapper.visible, true);
-  assert.equal(image.isConnected, false);
+  assert.deepEqual(rankCalls, [12, 5]);
+});
+
+test("MAIN applies selected Goliath to the active ship without reload", () => {
+  const roots = installerRoots();
+  roots.version = "n1.9.0.7777";
+  roots.user.ship.modelId = 44;
+  const calls = [];
+  roots.user.ship.setShipSprite = function setShipSprite() { calls.push(this.modelId); };
+  const windowRef = installerWindow(roots);
+  const installation = installCkda(windowRef);
+  windowRef.command({ type: "set-design-ship", shipDesign: "regalia" });
+  assert.equal(roots.user.ship.modelId, 218);
+  assert.deepEqual(calls, [218]);
+  installation.cleanup();
+  assert.equal(roots.user.ship.modelId, 44);
 });
 
 test("MAIN pagehide restores hooks and Premium, stops publisher, and removes command listener once", () => {
@@ -904,10 +906,10 @@ test("MAIN pagehide restores hooks and Premium, stops publisher, and removes com
   assert.equal(windowRef.messages.length, count);
 });
 
-test("MAIN pagehide cancels roots polling and unknown clients never install mutations", () => {
+test("MAIN pagehide cancels roots polling and malformed clients never install mutations", () => {
   assert.equal(typeof installCkda, "function");
   const roots = installerRoots();
-  roots.version = "1.9.0.053";
+  roots.version = "future";
   const emp = roots.world.addEmpNew;
   const windowRef = installerWindow(roots);
   installCkda(windowRef);
@@ -1019,7 +1021,7 @@ for (const reason of ["world", "map", "disconnect", "unsupported", "clear"]) {
     if (reason === "world") roots.world = { ...roots.world };
     else if (reason === "map") roots.world.mapId = 18;
     else if (reason === "disconnect") roots.network.connected = false;
-    else if (reason === "unsupported") roots.version = "1.9.0.053";
+    else if (reason === "unsupported") roots.version = "future";
     else {
       assert.equal(typeof publisher.clear, "function");
       publisher.clear();

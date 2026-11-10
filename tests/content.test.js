@@ -27,7 +27,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   window.setInterval = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
   window.clearInterval = id => timers.delete(id);
   const document = { ...eventTarget(), visibilityState: "visible" };
-  const calls = { commands: [], saves: [], canvas: [], botSnapshots: [], destroyed: [], starts: 0, stops: 0 };
+  const calls = { commands: [], saves: [], removes: [], canvas: [], botSnapshots: [], destroyed: [], starts: 0, stops: 0 };
   let options;
   let botBridge;
   let ckdaBridge;
@@ -44,6 +44,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
   window.__SA_BOT_ISOLATED_V1__ = {
     ...require("../src/settings.js"), ...require("../src/ckda-settings.js"),
     ...require("../src/design-settings.js"),
+    ...require("../src/loading-image-settings.js"),
     ...require("../src/ckda-schema.js"),
     ...require("../src/ckda-core.js"),
     whenDocumentReady(_document, callback) { callback(); },
@@ -87,9 +88,16 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
     },
     installEmergencyStop: () => () => calls.destroyed.push("shortcut")
   };
+  window.FileReader = class FileReader {
+    readAsDataURL(file) {
+      this.result = file.dataUrl;
+      this.onload();
+    }
+  };
   const chrome = { runtime: { id: "test-extension" }, storage: { local: {
     get(keys, callback) { calls.keys = keys; storageCallback = callback; if (!deferred) callback(stored); },
-    set(value) { calls.saves.push(value); return storageSet(value); }
+    set(value) { calls.saves.push(value); return storageSet(value); },
+    remove(key) { calls.removes.push(key); return storageSet({ remove: key }); }
   } } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../src/content.js"), "utf8"), {
     window, document, chrome, TextEncoder, Date
@@ -237,10 +245,32 @@ test("C-KDA lease send failure reports an error without releasing BOT resources"
 
 test("content loads independent C-KDA defaults and initializes MAIN settings", () => {
   const app = setup();
-  assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings", "designSettings"]);
+  assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings", "designSettings", "loadingScreenImage"]);
   assert.equal(app.model().ckdaSettings.empCooldownMs, 28000);
   assert.equal(app.model().ckdaSettings.premiumOverride, false);
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "set-design-rank", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+});
+
+test("Design Mode stores supported loading image and resets to Besto", async () => {
+  const app = setup();
+  const file = {
+    name: "custom.png", type: "image/png",
+    dataUrl: "data:image/png;base64,iVBORw0KGgo="
+  };
+  assert.equal(await app.options().onSaveLoadingImage(file), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), {
+    loadingScreenImage: {
+      name: "custom.png", mimeType: "image/png",
+      dataUrl: "data:image/png;base64,iVBORw0KGgo="
+    }
+  });
+  assert.equal(app.model().loadingImageName, "custom.png");
+  assert.equal(await app.options().onSaveLoadingImage({
+    name: "bad.webp", type: "image/webp", dataUrl: "data:image/webp;base64,AAAA"
+  }), false);
+  assert.equal(await app.options().onResetLoadingImage(), true);
+  assert.deepEqual(app.calls.removes, ["loadingScreenImage"]);
+  assert.equal(app.model().loadingImageName, "Besto GIF (default)");
 });
 
 test("Design Mode persists normalized rank and applies it without BOT lifecycle", async () => {
@@ -264,6 +294,7 @@ test("Design Mode persists Bastion ship choice without BOT lifecycle", async () 
     designSettings: { rankId: 0, shipDesign: "bastion" }
   });
   assert.equal(app.model().designSettings.shipDesign, "bastion");
+  assert.equal(app.calls.commands.filter(value => value.type === "set-design-ship").at(-1).payload.shipDesign, "bastion");
   assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 
@@ -382,7 +413,7 @@ test("late MAIN readiness resends persisted C-KDA configuration without BOT life
   assert.equal(app.model().ckdaSettings.sizePx, 8);
   app.calls.commands.length = 0;
   app.result({ type: "ready" });
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "set-design-rank", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
   assert.equal(app.calls.commands[0].payload.empCooldownMs, 15000);
   assert.equal(app.calls.commands[1].payload.enabled, true);
   assert.equal(app.calls.starts + app.calls.stops, 0);
@@ -435,10 +466,10 @@ test("unsupported source fingerprint diagnostics mark C-KDA unsupported even whe
   assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 
-test("mismatched adapter version clears C-KDA markers without touching BOT runtime", () => {
+test("malformed adapter version clears C-KDA markers without touching BOT runtime", () => {
   const app = setup();
   app.snapshot(snapshot());
-  app.diagnostic({ patchStatus: "patched", clientVersion: "1.9.0.053" });
+  app.diagnostic({ patchStatus: "patched", clientVersion: "future" });
   assert.equal(app.calls.statusText, "Unsupported client");
   assert.equal(app.model().ckdaSnapshot, null);
   assert.deepEqual(app.calls.canvas.at(-1), { clear: true });

@@ -1,9 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  isSupportedClientVersion,
   patchGameSource,
   summarizeRoot
 } = require("../src/source-patch.js");
+
+test("runtime version gate accepts future four-part builds only", () => {
+  assert.equal(isSupportedClientVersion("n1.9.0.7777"), true);
+  assert.equal(isSupportedClientVersion("future"), false);
+  assert.equal(isSupportedClientVersion("1.9.0"), false);
+});
 
 const marker = "const _0x416562='1.9.0.045';";
 const roots =
@@ -33,6 +40,14 @@ const nextRoots =
   "_0xa7de8f['followX'];_0x3ce5a6['handleWriteLog'];" +
   "_0x3a7293['initiateConnection']();" +
   "_0x1bdc1e['addEmpNew'];'instaShield';'tshield';_0x13411e['updatePremium'];";
+
+const current0996Roots =
+  "let _0x30ad6d,_0x598486,_0x4086e3,_0x6d416c,_0x37fa46,_0x38052d,_0x5977d3;" +
+  "_0x38052d['mapId'];_0x4086e3['ship'];" +
+  "_0x5977d3['gamepadTargeter'];_0x30ad6d['initListeners'];" +
+  "_0x37fa46['followX'];_0x598486['handleWriteLog'];" +
+  "_0x6d416c['initiateConnection']();" +
+  "_0x38052d['addEmpNew'];'instaShield';'tshield';_0x4086e3['updatePremium'];";
 
 test("patches only the recognized client fingerprint", () => {
   const result = patchGameSource(`${marker}${roots}`);
@@ -82,6 +97,22 @@ test("patches 1.9.0.052 with its exact seven root symbols", () => {
   assert.match(result.source, /get camera\(\).*_0xa7de8f/s);
   assert.match(result.source, /get world\(\).*_0x1bdc1e/s);
   assert.match(result.source, /get renderer\(\).*_0x456f25/s);
+});
+
+test("patches live 1.9.0.0996 with its exact seven root symbols", () => {
+  const result = patchGameSource(
+    `const _0xcurrent='1.9.0.0996';${current0996Roots}`
+  );
+
+  assert.equal(result.status, "patched");
+  assert.equal(result.version, "1.9.0.0996");
+  assert.match(result.source, /get input\(\).*_0x30ad6d/s);
+  assert.match(result.source, /get ui\(\).*_0x598486/s);
+  assert.match(result.source, /get user\(\).*_0x4086e3/s);
+  assert.match(result.source, /get network\(\).*_0x6d416c/s);
+  assert.match(result.source, /get camera\(\).*_0x37fa46/s);
+  assert.match(result.source, /get world\(\).*_0x38052d/s);
+  assert.match(result.source, /get renderer\(\).*_0x5977d3/s);
 });
 
 test("uses the known current fingerprint version when source has no literal", () => {

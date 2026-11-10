@@ -351,9 +351,9 @@ test("action executor stays disarmed until an explicit arm request", () => {
   assert.equal(fixture.messages.at(-1).payload.reason, "not-armed");
 });
 
-test("action executor refuses to arm an unsupported client version", () => {
+test("action executor refuses to arm a malformed client version", () => {
   const fixture = actionFixture();
-  fixture.roots.version = "1.9.0.045";
+  fixture.roots.version = "future";
 
   fixture.executor.handleMessage(actionEvent(fixture.windowRef, {
     requestId: 1,

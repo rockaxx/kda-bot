@@ -39,7 +39,22 @@
     ["rankId", "Rank design", "number"],
     ["shipDesign", "Ship design", "select"]
   ]);
+  const SHIP_DESIGN_OPTIONS = Object.freeze([
+    ["default", "Current ship design"], ["enforcer", "Goliath Enforcer"],
+    ["bastion", "Goliath Bastion"], ["goliath", "Goliath"],
+    ["veteran", "Goliath Veteran"], ["exalted", "Goliath Exalted"],
+    ["goal", "Goliath Goal"], ["kick", "Goliath Kick"],
+    ["referee", "Goliath Referee"], ["surgeon", "Goliath Surgeon"],
+    ["vanquisher", "Goliath Vanquisher"], ["sovereign", "Goliath Sovereign"],
+    ["peacemaker", "Goliath Peacemaker"], ["saturn", "Goliath Saturn"],
+    ["bronze", "Goliath Bronze"], ["silver", "Goliath Silver"],
+    ["gold", "Goliath Gold"], ["crimson", "Goliath Crimson"],
+    ["frost", "Goliath Frost"], ["ignite", "Goliath Ignite"],
+    ["plus-carbonite", "Goliath Plus Carbonite"], ["iron", "Goliath Iron"],
+    ["regalia", "Goliath Regalia"]
+  ].map(Object.freeze));
   const EXPECTED_CLIENT_VERSION = "1.9.0.052";
+  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
@@ -140,8 +155,7 @@
     return Boolean(
       diagnostic &&
       diagnostic.patchStatus === "patched" &&
-      String(diagnostic.clientVersion || "").replace(/^n/, "") ===
-        EXPECTED_CLIENT_VERSION
+      CLIENT_VERSION_PATTERN.test(String(diagnostic.clientVersion || "").replace(/^n/, ""))
     );
   }
 
@@ -221,6 +235,8 @@
     onSave,
     onSaveCkda = () => false,
     onSaveDesign = () => false,
+    onSaveLoadingImage = () => false,
+    onResetLoadingImage = () => false,
     onCkdaCommand = () => {},
     onExport
   }) {
@@ -417,7 +433,7 @@
     const shipDesignSelect = documentRef.createElement("select");
     shipDesignSelect.id = "sa-design-shipDesign";
     shipDesignSelect.dataset.designSetting = "shipDesign";
-    for (const [value, text] of [["default", "Default Surgeon"], ["bastion", "Bastion"]]) {
+    for (const [value, text] of SHIP_DESIGN_OPTIONS) {
       const option = documentRef.createElement("option");
       option.value = value;
       option.textContent = text;
@@ -571,15 +587,34 @@
     const shipField = documentRef.createElement("div");
     shipField.className = "field wide";
     const shipLabel = documentRef.createElement("label");
-    shipLabel.textContent = "Surgeon appearance";
+    shipLabel.textContent = "Active ship appearance";
     shipLabel.htmlFor = shipDesignSelect.id;
     shipField.append(shipLabel, shipDesignSelect);
     designFields.appendChild(shipField);
+    const loadingField = documentRef.createElement("div");
+    loadingField.className = "field wide";
+    const loadingLabel = documentRef.createElement("label");
+    loadingLabel.textContent = "Loading image (GIF, PNG, JPEG)";
+    const loadingImageInput = documentRef.createElement("input");
+    loadingImageInput.id = "sa-design-loadingImage";
+    loadingImageInput.type = "file";
+    loadingImageInput.accept = ".gif,.png,.jpg,.jpeg,image/gif,image/png,image/jpeg";
+    loadingImageInput.dataset.designSetting = "loadingImage";
+    loadingLabel.htmlFor = loadingImageInput.id;
+    loadingField.append(loadingLabel, loadingImageInput);
+    designFields.appendChild(loadingField);
     const designNote = documentRef.createElement("div");
     designNote.className = "ckda-visual";
-    designNote.textContent = "Visual-only local override. Ship design changes after game reload.";
+    designNote.textContent = "Ship changes apply live. Custom loading image applies after reload; no upload uses Besto GIF.";
+    const loadingImageStatus = documentRef.createElement("div");
+    loadingImageStatus.className = "mode-reason";
+    loadingImageStatus.textContent = "Besto GIF (default)";
+    const loadingControls = documentRef.createElement("div");
+    loadingControls.className = "controls";
+    const uploadLoadingButton = makeButton("UPLOAD LOADING", "action", loadingControls);
+    const resetLoadingButton = makeButton("DEFAULT BESTO", "secondary", loadingControls);
     const saveDesignButton = makeButton("SAVE DESIGN", "action wide", designView);
-    designView.prepend(designTitle, designFields, designNote);
+    designView.prepend(designTitle, designFields, designNote, loadingImageStatus, loadingControls);
     panel.append(ckdaView, designView);
 
     const footer = documentRef.createElement("footer");
@@ -631,6 +666,11 @@
     saveButton.addEventListener("click", () => settingsForm.submit(onSave));
     saveCkdaButton.addEventListener("click", () => ckdaForm.submit(onSaveCkda));
     saveDesignButton.addEventListener("click", () => designForm.submit(onSaveDesign));
+    uploadLoadingButton.addEventListener("click", () => {
+      const file = loadingImageInput.files?.[0];
+      if (file) onSaveLoadingImage(file);
+    });
+    resetLoadingButton.addEventListener("click", () => onResetLoadingImage());
     clearCkdaButton.addEventListener("click", () => onCkdaCommand("clear"));
     exportButton.addEventListener("click", () => onExport());
 
@@ -639,6 +679,7 @@
       settingsForm.sync(model.settings);
       ckdaForm.sync(model.ckdaSettings);
       designForm.sync(model.designSettings);
+      loadingImageStatus.textContent = model.loadingImageName || "Besto GIF (default)";
       startButton.disabled = !canStartBot(model) || Boolean(model.active);
       stopButton.disabled = !model.active;
       exportButton.disabled = !model.diagnostic && !model.clientSource;

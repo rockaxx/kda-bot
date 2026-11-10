@@ -6,9 +6,35 @@
   "use strict";
 
   const CLIENT_VERSION = "1.9.0.052";
+  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const BUILD_MARKER_PATTERN =
     /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
   const CLIENT_FINGERPRINTS = Object.freeze([
+    Object.freeze({
+      version: "1.9.0.0996",
+      markers: Object.freeze([
+        "_0x38052d['mapId']",
+        "_0x4086e3['ship']",
+        "_0x5977d3['gamepadTargeter']",
+        "_0x30ad6d['initListeners']",
+        "_0x37fa46['followX']",
+        "_0x598486['handleWriteLog']",
+        "_0x6d416c['initiateConnection']()",
+        "['addEmpNew']",
+        "'instaShield'",
+        "'tshield'",
+        "['updatePremium']"
+      ]),
+      roots: Object.freeze({
+        input: "_0x30ad6d",
+        ui: "_0x598486",
+        user: "_0x4086e3",
+        network: "_0x6d416c",
+        camera: "_0x37fa46",
+        world: "_0x38052d",
+        renderer: "_0x5977d3"
+      })
+    }),
     Object.freeze({
       version: "1.9.0.052",
       markers: Object.freeze([
@@ -106,6 +132,10 @@
     return { status: "unsupported", source, version: null, reason };
   }
 
+  function isSupportedClientVersion(value) {
+    return CLIENT_VERSION_PATTERN.test(String(value || "").replace(/^n/, ""));
+  }
+
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
     const fingerprints = CLIENT_FINGERPRINTS.filter(({ markers }) =>
@@ -195,5 +225,5 @@
     return visit(value, 0);
   }
 
-  return { CLIENT_VERSION, patchGameSource, summarizeRoot };
+  return { CLIENT_VERSION, isSupportedClientVersion, patchGameSource, summarizeRoot };
 });

@@ -5,153 +5,87 @@
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
 
-  const RANK_ASSET_ROOT = "https://unsmod.eu/spacemap/ui/rank";
-
   function validRankId(value) {
     return Number.isInteger(value) && value >= 0 && value <= 20;
   }
 
-  function rankAssetUrl(rankId) {
-    return validRankId(rankId) && rankId > 0
-      ? `${RANK_ASSET_ROOT}/${rankId}/0.png`
-      : null;
-  }
+  const SHIP_MODEL_IDS = Object.freeze({
+    default: null, enforcer: 1, bastion: 2, goliath: 14, veteran: 17,
+    exalted: 18, goal: 19, kick: 20, referee: 21, surgeon: 31,
+    vanquisher: 78, sovereign: 79, peacemaker: 80, saturn: 81,
+    bronze: 91, silver: 92, gold: 93, crimson: 95, frost: 128,
+    ignite: 133, "plus-carbonite": 181, iron: 216, regalia: 218
+  });
 
-  function rankTargetFromRoots(roots) {
-    try {
-      const ship = roots && roots.user && roots.user.ship;
-      const rankLogo = ship && ship.rankLogo;
-      const rankWrapper = rankLogo &&
-        (rankLogo.wrapper || (rankLogo.renderer && rankLogo.renderer.wrapper) || rankLogo);
-      if (rankWrapper) return { wrapper: rankWrapper, hideNative: true, offsetY: 0 };
-      const shipWrapper = ship && (ship.wrapper || (ship.renderer && ship.renderer.wrapper));
-      return shipWrapper ? { wrapper: shipWrapper, hideNative: false, offsetY: -48 } : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function project(wrapper) {
-    try {
-      let point = null;
-      if (wrapper && typeof wrapper.toGlobal === "function") point = wrapper.toGlobal({ x: 0, y: 0 });
-      else if (wrapper && typeof wrapper.getGlobalPosition === "function") point = wrapper.getGlobalPosition();
-      else if (wrapper && wrapper.worldTransform) {
-        point = { x: wrapper.worldTransform.tx, y: wrapper.worldTransform.ty };
-      }
-      return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? point : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function createRankOverride({ windowRef, documentRef, getRoots } = {}) {
-    if (!windowRef || !documentRef || typeof documentRef.createElement !== "function" ||
-        typeof getRoots !== "function") {
+  function createRankOverride({ windowRef, getRoots } = {}) {
+    if (!windowRef || typeof getRoots !== "function") {
       return { setRank() { return false; }, cleanup() { return false; } };
     }
-
-    const image = documentRef.createElement("img");
-    Object.assign(image.style, {
-      display: "none",
-      left: "0px",
-      pointerEvents: "none",
-      position: "fixed",
-      top: "0px",
-      transform: "translate(-50%, -50%)",
-      zIndex: "2147483646"
-    });
-    image.alt = "";
-    image.setAttribute?.("aria-hidden", "true");
-
-    let rankId = 0;
-    let loaded = false;
-    let failed = false;
-    let frameId = null;
-    let hiddenWrapper = null;
-    let hiddenWrapperVisible = true;
-    let stopped = false;
-
     const requestFrame = typeof windowRef.requestAnimationFrame === "function"
       ? (fn) => windowRef.requestAnimationFrame(fn)
       : (fn) => windowRef.setTimeout(fn, 16);
     const cancelFrame = typeof windowRef.cancelAnimationFrame === "function"
       ? (id) => windowRef.cancelAnimationFrame(id)
       : (id) => windowRef.clearTimeout(id);
+    let selectedRank = 0;
+    let activeShip = null;
+    let nativeRank = null;
+    let frameId = null;
+    let stopped = false;
 
-    function restoreNative() {
-      if (hiddenWrapper) {
-        try { hiddenWrapper.visible = hiddenWrapperVisible; } catch (_) { /* stale PIXI object */ }
-      }
-      hiddenWrapper = null;
-      image.style.display = "none";
+    function currentShip() {
+      try {
+        const ship = getRoots()?.user?.ship;
+        return ship && typeof ship.setRank === "function" ? ship : null;
+      } catch (_) { return null; }
     }
 
-    function connectImage() {
-      if (!image.isConnected && documentRef.body && typeof documentRef.body.appendChild === "function") {
-        documentRef.body.appendChild(image);
+    function restoreShip() {
+      if (activeShip && validRankId(nativeRank)) {
+        try { activeShip.setRank(nativeRank); } catch (_) { /* stale game object */ }
+      }
+      activeShip = null;
+      nativeRank = null;
+    }
+
+    function apply() {
+      if (stopped || selectedRank === 0) return;
+      const ship = currentShip();
+      if (!ship) return;
+      if (ship !== activeShip) {
+        restoreShip();
+        activeShip = ship;
+        nativeRank = validRankId(ship.rank) ? ship.rank : 0;
+      } else if (validRankId(ship.rank) && ship.rank !== selectedRank) {
+        nativeRank = ship.rank;
+      }
+      if (ship.rank !== selectedRank) {
+        try { ship.setRank(selectedRank); } catch (_) { /* retry next frame */ }
       }
     }
 
     function schedule() {
-      if (!stopped && rankId > 0 && frameId === null) frameId = requestFrame(render);
+      if (!stopped && selectedRank > 0 && frameId === null) frameId = requestFrame(monitor);
     }
 
-    function render() {
+    function monitor() {
       frameId = null;
-      if (stopped || rankId === 0) return restoreNative();
-      if (failed) return restoreNative();
-      connectImage();
-      const target = rankTargetFromRoots(getRoots());
-      const wrapper = target && target.wrapper;
-      const point = loaded && !failed ? project(wrapper) : null;
-      if (!wrapper || !point) {
-        restoreNative();
-        schedule();
-        return;
-      }
-      if (target.hideNative && hiddenWrapper !== wrapper) {
-        restoreNative();
-        hiddenWrapper = wrapper;
-        hiddenWrapperVisible = wrapper.visible;
-      }
-      if (target.hideNative) {
-        try { wrapper.visible = false; } catch (_) { restoreNative(); schedule(); return; }
-      }
-      image.style.left = `${point.x}px`;
-      image.style.top = `${point.y + target.offsetY}px`;
-      image.style.display = "block";
+      if (stopped || selectedRank === 0) return;
+      apply();
       schedule();
     }
-
-    image.onload = () => {
-      loaded = true;
-      failed = false;
-      schedule();
-    };
-    image.onerror = () => {
-      loaded = false;
-      failed = true;
-      if (frameId !== null) cancelFrame(frameId);
-      frameId = null;
-      restoreNative();
-    };
 
     function setRank(value) {
       if (stopped || !validRankId(value)) return false;
-      rankId = value;
-      loaded = false;
-      failed = false;
-      restoreNative();
       if (frameId !== null) cancelFrame(frameId);
       frameId = null;
-      const url = rankAssetUrl(value);
-      if (!url) {
-        image.remove?.();
+      if (value === 0) {
+        selectedRank = 0;
+        restoreShip();
         return true;
       }
-      connectImage();
-      image.src = url;
+      selectedRank = value;
+      apply();
       schedule();
       return true;
     }
@@ -161,15 +95,110 @@
       stopped = true;
       if (frameId !== null) cancelFrame(frameId);
       frameId = null;
-      restoreNative();
-      image.onload = null;
-      image.onerror = null;
-      image.remove?.();
+      restoreShip();
       return true;
     }
 
     return { setRank, cleanup };
   }
 
-  return { createRankOverride, rankAssetUrl };
+  function createShipOverride({ windowRef, getRoots } = {}) {
+    if (!windowRef || typeof getRoots !== "function") {
+      return { setDesign() { return false; }, cleanup() { return false; } };
+    }
+    const requestFrame = typeof windowRef.requestAnimationFrame === "function"
+      ? (fn) => windowRef.requestAnimationFrame(fn)
+      : (fn) => windowRef.setTimeout(fn, 16);
+    const cancelFrame = typeof windowRef.cancelAnimationFrame === "function"
+      ? (id) => windowRef.cancelAnimationFrame(id)
+      : (id) => windowRef.clearTimeout(id);
+    let selectedDesign = "default";
+    let activeShip = null;
+    let nativeModelId = null;
+    let frameId = null;
+    let stopped = false;
+
+    function currentShip() {
+      try {
+        const ship = getRoots()?.user?.ship;
+        return ship && Number.isInteger(ship.modelId) && typeof ship.setShipSprite === "function"
+          ? ship
+          : null;
+      } catch (_) { return null; }
+    }
+
+    function restoreShip() {
+      if (activeShip && Number.isInteger(nativeModelId)) {
+        try {
+          activeShip.modelId = nativeModelId;
+          activeShip.setShipSprite();
+        } catch (_) { /* stale game object */ }
+      }
+      activeShip = null;
+      nativeModelId = null;
+    }
+
+    function apply(captureNativeUpdate = true) {
+      if (stopped || selectedDesign === "default") return;
+      const ship = currentShip();
+      if (!ship) return;
+      const targetModelId = SHIP_MODEL_IDS[selectedDesign];
+      if (ship !== activeShip) {
+        restoreShip();
+        activeShip = ship;
+        nativeModelId = ship.modelId;
+      } else if (captureNativeUpdate && ship.modelId !== targetModelId) {
+        nativeModelId = ship.modelId;
+      }
+      if (ship.modelId === targetModelId) return;
+      const before = ship.modelId;
+      try {
+        ship.modelId = targetModelId;
+        ship.setShipSprite();
+      } catch (_) {
+        ship.modelId = before;
+      }
+    }
+
+    function schedule() {
+      if (!stopped && selectedDesign !== "default" && frameId === null) {
+        frameId = requestFrame(monitor);
+      }
+    }
+
+    function monitor() {
+      frameId = null;
+      if (stopped || selectedDesign === "default") return;
+      apply();
+      schedule();
+    }
+
+    function setDesign(value) {
+      if (stopped || !Object.hasOwn(SHIP_MODEL_IDS, value)) return false;
+      if (frameId !== null) cancelFrame(frameId);
+      frameId = null;
+      if (value === "default") {
+        selectedDesign = value;
+        restoreShip();
+        return true;
+      }
+      selectedDesign = value;
+      apply(false);
+      schedule();
+      return true;
+    }
+
+    function cleanup() {
+      if (stopped) return false;
+      stopped = true;
+      if (frameId !== null) cancelFrame(frameId);
+      frameId = null;
+      restoreShip();
+      return true;
+    }
+
+    return { setDesign, cleanup };
+  }
+
+  return { SHIP_MODEL_IDS, createRankOverride, createShipOverride };
 });

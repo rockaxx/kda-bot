@@ -20,14 +20,14 @@ const forbiddenGlobalHooks = [
   /Object\.defineProperty\s*\(\s*window\s*,\s*["']Function["']/
 ];
 
-test("manifest is scoped to the game and has no sensitive permissions", () => {
+test("manifest is scoped to the game with local unlimited image storage only", () => {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(root, "manifest.json"), "utf8")
   );
 
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.host_permissions || [], []);
-  assert.deepEqual(manifest.permissions, ["storage"]);
+  assert.deepEqual(manifest.permissions, ["storage", "unlimitedStorage"]);
   assert.equal(
     manifest.content_scripts.every(
       (entry) =>
@@ -108,15 +108,21 @@ test("packages the validated C-KDA GIF binary", () => {
   assert.equal(["GIF87a", "GIF89a"].includes(asset.subarray(0, 6).toString("ascii")), true);
 });
 
-test("packages the custom KDA loading GIF and injects its body background CSS", () => {
+test("packages loading GIF with state-scoped CSS that disables it in game", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
   const isolated = manifest.content_scripts.find(entry => entry.world === "ISOLATED");
   const resources = manifest.web_accessible_resources.flatMap(entry => entry.resources || []);
   assert.ok(isolated.css.includes("src/loading-screen.css"));
   assert.ok(resources.includes("assets/besto.gif"));
+  assert.ok(resources.includes("assets/Models.steam.json"));
   assert.ok(fs.statSync(path.join(root, "assets/besto.gif")).size > 0);
-  assert.match(fs.readFileSync(path.join(root, "src/loading-screen.css"), "utf8"), /besto\.gif/);
-  assert.match(fs.readFileSync(path.join(root, "src/loading-screen.css"), "utf8"), /background-image:[^;]+!important/);
+  const modelData = JSON.parse(fs.readFileSync(path.join(root, "assets/Models.steam.json"), "utf8"));
+  assert.ok(modelData.ships[2]);
+  assert.ok(modelData.ships[31]);
+  const loadingCss = fs.readFileSync(path.join(root, "src/loading-screen.css"), "utf8");
+  assert.match(loadingCss, /html:not\(\[data-kda-loading-ready="true"\]\) body/);
+  assert.match(loadingCss, /url\("\.\.\/assets\/besto\.gif"\) !important/);
+  assert.match(loadingCss, /html\[data-kda-loading-ready="true"\] body[\s\S]*background-image: none !important/);
 });
 
 test("maintained extension source does not install broad global hooks", () => {
@@ -161,13 +167,15 @@ test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
     "src/design-main.js",
     "src/ckda-main.js"
   ]);
-  assert.deepEqual(isolated.js.slice(0, 6), [
+  assert.deepEqual(isolated.js.slice(0, 8), [
+    "src/namespace.js",
+    "src/loading-image-settings.js",
     "src/loading-screen.js",
     "src/design-bootstrap.js",
-    "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",
-    "src/design-settings.js"
+    "src/design-settings.js",
+    "src/ckda-core.js"
   ]);
   assert.ok(isolated.js.indexOf("src/ckda-canvas.js") < isolated.js.indexOf("src/overlay.js"));
   assert.ok(isolated.js.indexOf("src/ckda-bridge.js") < isolated.js.indexOf("src/content.js"));

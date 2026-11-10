@@ -39,14 +39,15 @@ test("accepts C-KDA snapshots and copies only declared keys", () => {
   assert.notEqual(result.value.players[0], input.players[0]);
 });
 
-test("rejects C-KDA snapshots from an unknown client version", () => {
+test("accepts future four-part client versions and rejects malformed versions", () => {
   const result = validateCkdaSnapshot({
     ...validSnapshot,
-    clientVersion: "1.9.0.053"
+    clientVersion: "1.9.0.7777"
   });
-
-  assert.equal(result.ok, false);
-  assert.deepEqual(result.errors, ["clientVersion is invalid"]);
+  assert.equal(result.ok, true);
+  const malformed = validateCkdaSnapshot({ ...validSnapshot, clientVersion: "future" });
+  assert.equal(malformed.ok, false);
+  assert.deepEqual(malformed.errors, ["clientVersion is invalid"]);
 });
 
 test("accepts a matching C-KDA snapshot envelope", () => {
@@ -160,5 +161,14 @@ test("C-KDA command schema strictly validates Design Mode rank commands", () => 
     { requestId: 1, type: "set-design-rank", rankId: 20, extra: true }
   ]) {
     assert.equal(validateCkdaEnvelope({ ...envelope, payload }).ok, false);
+  }
+});
+
+test("C-KDA command schema validates live ship design commands", () => {
+  const envelope = { channel: CKDA_CHANNEL, direction: "command",
+    payload: { requestId: 1, type: "set-design-ship", shipDesign: "regalia" } };
+  assert.equal(validateCkdaEnvelope(envelope).ok, true);
+  for (const shipDesign of ["unknown", "", 218]) {
+    assert.equal(validateCkdaEnvelope({ ...envelope, payload: { ...envelope.payload, shipDesign } }).ok, false);
   }
 });

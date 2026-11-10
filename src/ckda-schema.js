@@ -10,6 +10,7 @@
   const CKDA_CHANNEL = "sa-ckda-v1";
   const CKDA_MAX_ENVELOPE_BYTES = 4096;
   const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.052";
+  const CKDA_CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const CONNECTION_STATES = new Set([
     "connected",
     "connecting",
@@ -18,9 +19,16 @@
   const DIRECTIONS = new Set(["snapshot", "command", "result", "lifecycle"]);
   const RELATIONS = new Set(["ally", "enemy"]);
   const PREMIUM_STATES = new Set(["inactive", "active", "unsupported"]);
+  const SHIP_DESIGNS = new Set([
+    "default", "enforcer", "bastion", "goliath", "veteran", "exalted",
+    "goal", "kick", "referee", "surgeon", "vanquisher", "sovereign",
+    "peacemaker", "saturn", "bronze", "silver", "gold", "crimson",
+    "frost", "ignite", "plus-carbonite", "iron", "regalia"
+  ]);
   const COMMAND_FIELDS = Object.freeze({
     "set-premium": ["enabled"],
     "set-design-rank": ["rankId"],
+    "set-design-ship": ["shipDesign"],
     "configure-effects": ["empCooldownMs", "ishCooldownMs"],
     clear: [], refresh: [], teardown: [], "renew-lease": []
   });
@@ -90,7 +98,7 @@
     if (!isNonNegativeFinite(value.timestamp)) {
       errors.push("timestamp is invalid");
     }
-    if (value.clientVersion !== CKDA_SUPPORTED_CLIENT_VERSION) {
+    if (!CKDA_CLIENT_VERSION_PATTERN.test(value.clientVersion)) {
       errors.push("clientVersion is invalid");
     }
     if (!CONNECTION_STATES.has(value.connectionState)) {
@@ -170,6 +178,9 @@
           if (payload.type === "set-design-rank" &&
               (!Number.isInteger(payload.rankId) || payload.rankId < 0 || payload.rankId > 20)) {
             errors.push("rankId is invalid");
+          }
+          if (payload.type === "set-design-ship" && !SHIP_DESIGNS.has(payload.shipDesign)) {
+            errors.push("shipDesign is invalid");
           }
           if (payload.type === "configure-effects" && fields.some(key =>
             !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000

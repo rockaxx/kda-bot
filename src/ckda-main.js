@@ -17,6 +17,7 @@
   "use strict";
 
   const CLIENT_VERSION = "1.9.0.052";
+  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
   const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
   const LEASE_DURATION_MS = 120000;
@@ -24,6 +25,10 @@
 
   function normalizedClientVersion(value) {
     return String(value || "").replace(/^n/, "");
+  }
+
+  function supportedClientVersion(value) {
+    return CLIENT_VERSION_PATTERN.test(normalizedClientVersion(value));
   }
 
   function createPremiumOverride(roots, documentRef) {
@@ -43,7 +48,7 @@
 
     function compatibleRoots() {
       try {
-        return normalizedClientVersion(roots && roots.version) === CLIENT_VERSION;
+        return supportedClientVersion(roots && roots.version);
       } catch (_) {
         return false;
       }
@@ -358,7 +363,7 @@
         !user.ship ||
         !roots.network ||
         roots.network.connected !== true ||
-        normalizedClientVersion(roots.version) !== CLIENT_VERSION ||
+        !supportedClientVersion(roots.version) ||
         !Number.isInteger(mapId) ||
         mapId < 1 ||
         typeof ships.forEach !== "function" ||
@@ -390,7 +395,7 @@
 
       const result = dependency.validateCkdaSnapshot({
         timestamp,
-        clientVersion: CLIENT_VERSION,
+        clientVersion: normalizedClientVersion(roots.version),
         connectionState: "connected",
         mapId,
         premiumState,
@@ -529,6 +534,7 @@
     let cooldowns = null;
     let premium = null;
     let rankOverride = null;
+    let shipOverride = null;
     let hooks = null;
     let hookedWorld = null;
     let roots = null;
@@ -568,6 +574,8 @@
           publisher.clear();
         } else if (command.type === "set-design-rank") {
           rankOverride?.setRank(command.rankId);
+        } else if (command.type === "set-design-ship") {
+          shipOverride?.setDesign(command.shipDesign);
         }
         publisher.refresh();
       } catch (_) {
@@ -587,7 +595,8 @@
       windowRef.removeEventListener("beforeunload", cleanup);
       for (const release of [
         () => publisher?.stop(), () => hooks?.cleanup(),
-        () => premium?.disable(), () => rankOverride?.cleanup(), () => cooldowns?.clearAll()
+        () => premium?.disable(), () => rankOverride?.cleanup(),
+        () => shipOverride?.cleanup(), () => cooldowns?.clearAll()
       ]) {
         try { release(); } catch (_) { /* Release the remaining independent resources. */ }
       }
@@ -600,7 +609,7 @@
       try {
         const candidate = windowRef.__SA_BOT_ROOTS__;
         if (!candidate) return;
-        if (normalizedClientVersion(candidate.version) !== CLIENT_VERSION) {
+        if (!supportedClientVersion(candidate.version)) {
           result({ state: "unsupported-client" });
           return;
         }
@@ -610,6 +619,10 @@
         rankOverride = dependency.createRankOverride({
           windowRef,
           documentRef: windowRef.document,
+          getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots
+        });
+        shipOverride = dependency.createShipOverride({
+          windowRef,
           getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots
         });
         publisher = startCkdaPublisher(windowRef, roots, {

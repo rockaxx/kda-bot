@@ -207,7 +207,7 @@ for (const reason of ["map", "disconnect", "unsupported", "clear", "destroy"]) {
     const empty = { ...validSnapshot(), players: [] };
     if (reason === "map") empty.mapId = 18;
     else if (reason === "disconnect") empty.connectionState = "disconnected";
-    else if (reason === "unsupported") empty.clientVersion = "1.9.0.053";
+    else if (reason === "unsupported") empty.clientVersion = "future";
     else canvas[reason]();
     canvas.render(empty, validSettings());
     canvas.render({ ...empty, clientVersion: "1.9.0.052", connectionState: "connected" }, validSettings());

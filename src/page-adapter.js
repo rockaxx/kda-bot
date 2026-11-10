@@ -381,7 +381,7 @@
           const world = roots && roots.world;
           const clientVersion = String(roots && roots.version || "")
             .replace(/^n/, "");
-          if (clientVersion !== sourcePatch.CLIENT_VERSION) {
+          if (!sourcePatch.isSupportedClientVersion(clientVersion)) {
             publishResult(payload, false, "unsupported-client-version");
             return;
           }

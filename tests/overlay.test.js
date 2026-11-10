@@ -115,16 +115,45 @@ test("Design Mode rank selector reads numeric rank IDs", () => {
   assert.deepEqual(submitted, { rankId: 20, shipDesign: "bastion" });
 });
 
-test("Design Mode exposes Default Surgeon and Bastion ship choices", () => {
+test("Design Mode exposes active-ship default and Goliath design list", () => {
   const originalObserver = global.MutationObserver;
   global.MutationObserver = class { observe() {} disconnect() {} };
   try {
     const { documentRef, elements } = createOverlayDocument();
     const overlay = createOverlay({ documentRef });
     const select = elements.find(element => element.dataset.designSetting === "shipDesign");
-    assert.deepEqual(select.children.map(option => [option.value, option.textContent]), [
-      ["default", "Default Surgeon"], ["bastion", "Bastion"]
+    const options = select.children.map(option => [option.value, option.textContent]);
+    assert.deepEqual(options.slice(0, 3), [
+      ["default", "Current ship design"], ["enforcer", "Goliath Enforcer"], ["bastion", "Goliath Bastion"]
     ]);
+    assert.ok(options.some(([value]) => value === "surgeon"));
+    assert.ok(options.some(([value]) => value === "regalia"));
+    assert.ok(options.length >= 20);
+    overlay.destroy();
+  } finally {
+    global.MutationObserver = originalObserver;
+  }
+});
+
+test("Design Mode exposes GIF PNG JPEG loading upload and default reset", async () => {
+  const originalObserver = global.MutationObserver;
+  global.MutationObserver = class { observe() {} disconnect() {} };
+  const calls = [];
+  try {
+    const { documentRef, elements } = createOverlayDocument();
+    const overlay = createOverlay({
+      documentRef,
+      onSaveLoadingImage(file) { calls.push(["upload", file]); return true; },
+      onResetLoadingImage() { calls.push(["reset"]); return true; }
+    });
+    const input = elements.find(element => element.dataset.designSetting === "loadingImage");
+    assert.equal(input.type, "file");
+    assert.equal(input.accept, ".gif,.png,.jpg,.jpeg,image/gif,image/png,image/jpeg");
+    const file = { name: "custom.gif", type: "image/gif" };
+    input.files = [file];
+    elements.find(element => element.textContent === "UPLOAD LOADING").listeners.click();
+    elements.find(element => element.textContent === "DEFAULT BESTO").listeners.click();
+    assert.deepEqual(calls, [["upload", file], ["reset"]]);
     overlay.destroy();
   } finally {
     global.MutationObserver = originalObserver;
@@ -405,13 +434,17 @@ test("client source export takes priority over fallback diagnostic JSON", () => 
   );
 });
 
-test("only the current patched client enables the adapter gate", () => {
+test("any structurally patched four-part client version enables the adapter gate", () => {
   assert.equal(
     isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.052" }),
     true
   );
   assert.equal(
     isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.049" }),
+    true
+  );
+  assert.equal(
+    isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "future" }),
     false
   );
   assert.equal(

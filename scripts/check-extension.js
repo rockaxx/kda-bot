@@ -5,14 +5,18 @@ const root = path.resolve(__dirname, "..");
 const manifest = JSON.parse(
   fs.readFileSync(path.join(root, "manifest.json"), "utf8")
 );
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8")
+);
 const errors = [];
-const allowedPermissions = new Set(["storage"]);
+const allowedPermissions = new Set(["storage", "unlimitedStorage"]);
 const exactMatch = JSON.stringify([
   "https://steam.space-aces.com/gameNew*"
 ]);
 const resourceMatch = JSON.stringify(["https://steam.space-aces.com/*"]);
 const cKdaAsset = "assets/c-kda.gif";
 const loadingAsset = "assets/besto.gif";
+const modelsAsset = "assets/Models.steam.json";
 const loadingCss = "src/loading-screen.css";
 const expectedScripts = {
   MAIN: [
@@ -26,9 +30,10 @@ const expectedScripts = {
     "src/ckda-main.js"
   ],
   ISOLATED: [
+    "src/namespace.js",
+    "src/loading-image-settings.js",
     "src/loading-screen.js",
     "src/design-bootstrap.js",
-    "src/namespace.js",
     "src/ckda-schema.js",
     "src/ckda-settings.js",
     "src/design-settings.js",
@@ -59,6 +64,10 @@ const forbiddenGlobalHooks = [
   /Object\.defineProperty\s*\(\s*Reflect\s*,\s*["']defineProperty["']/,
   /Object\.defineProperty\s*\(\s*window\s*,\s*["']Function["']/
 ];
+
+if (manifest.version !== packageJson.version) {
+  errors.push("manifest and package versions must match");
+}
 
 for (const permission of manifest.permissions || []) {
   if (!allowedPermissions.has(permission)) {
@@ -143,6 +152,33 @@ if (!fs.existsSync(loadingAssetPath)) {
   }
 }
 
+const modelsResource = (manifest.web_accessible_resources || []).find((entry) =>
+  Array.isArray(entry.resources) && entry.resources.includes(modelsAsset)
+);
+if (!modelsResource || JSON.stringify(modelsResource.matches) !== resourceMatch) {
+  errors.push("missing origin-scoped Models.steam.json resource");
+}
+const modelsAssetPath = path.join(root, modelsAsset);
+if (!fs.existsSync(modelsAssetPath)) {
+  errors.push("missing packaged Models.steam.json");
+} else {
+  try {
+    const models = JSON.parse(fs.readFileSync(modelsAssetPath, "utf8"));
+    if (!models.ships || !models.ships[2] || !models.ships[31]) {
+      errors.push("packaged Models.steam.json lacks Bastion or Surgeon");
+    }
+  } catch (_) {
+    errors.push("invalid packaged Models.steam.json");
+  }
+}
+
+const loadingCssText = fs.readFileSync(path.join(root, loadingCss), "utf8");
+if (!/html:not\(\[data-kda-loading-ready="true"\]\) body/.test(loadingCssText) ||
+    !/url\("\.\.\/assets\/besto\.gif"\) !important/.test(loadingCssText) ||
+    !/html\[data-kda-loading-ready="true"\] body[\s\S]*background-image: none !important/.test(loadingCssText)) {
+  errors.push("loading GIF CSS must be state-scoped and disabled after MAIN readiness");
+}
+
 const sourceDir = path.join(root, "src");
 const maintainedSource = fs.readdirSync(sourceDir)
   .filter((name) => name.endsWith(".js"))
@@ -150,6 +186,9 @@ const maintainedSource = fs.readdirSync(sourceDir)
   .join("\n");
 if (!/CKDA_SUPPORTED_CLIENT_VERSION\s*=\s*["']1\.9\.0\.052["']/.test(maintainedSource)) {
   errors.push("missing supported C-KDA client version marker");
+}
+if (!maintainedSource.includes("1.9.0.0996")) {
+  errors.push("missing live 1.9.0.0996 client support");
 }
 if (
   !/const CHANNEL\s*=\s*["']sa-bot-v1["']/.test(maintainedSource) ||
@@ -168,4 +207,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log("extension check passed: scripts, C-KDA asset, loading asset, version, channels, hook safety");
+console.log("extension check passed: scripts, C-KDA asset, loading asset, local models, version, channels, hook safety");

@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
   "name": "KDA",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minimum_chrome_version": "111",
-  "permissions": ["storage"],
+  "permissions": ["storage", "unlimitedStorage"],
   "web_accessible_resources": [
     {
-      "resources": ["assets/c-kda.gif", "assets/besto.gif"],
+      "resources": ["assets/c-kda.gif", "assets/besto.gif", "assets/Models.steam.json"],
       "matches": ["https://steam.space-aces.com/*"]
     }
   ],
@@ -30,9 +30,10 @@
       "matches": ["https://steam.space-aces.com/gameNew*"],
       "css": ["src/loading-screen.css"],
       "js": [
+        "src/namespace.js",
+        "src/loading-image-settings.js",
         "src/loading-screen.js",
         "src/design-bootstrap.js",
-        "src/namespace.js",
         "src/ckda-schema.js",
         "src/ckda-settings.js",
         "src/design-settings.js",
