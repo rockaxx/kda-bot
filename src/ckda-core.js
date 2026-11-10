@@ -76,6 +76,38 @@
     return "enemy";
   }
 
+  function toCanvasCssPoint(point, roots) {
+    let x = point.x;
+    let y = point.y;
+    try {
+      const renderer = roots?.renderer;
+      const pixi = renderer?.core?.renderer;
+      const canvas = renderer?.canvas || pixi?.canvas || pixi?.view;
+      const rect = canvas?.getBoundingClientRect?.();
+      const resolution = Number(pixi?.resolution);
+      const width = Number(pixi?.screen?.width) ||
+        (resolution > 0 ? Number(pixi?.width || canvas?.width) / resolution : 0);
+      const height = Number(pixi?.screen?.height) ||
+        (resolution > 0 ? Number(pixi?.height || canvas?.height) / resolution : 0);
+      const zoom = renderer?.zoomLevel;
+      // The alternate engine applies setZoom after the world transform. PIXI's
+      // container-zoom path already includes it, so only the former needs this.
+      if (typeof pixi?.setZoom === "function" && Number.isFinite(zoom) && zoom > 0 &&
+          Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        x = width / 2 + (x - width / 2) * zoom;
+        y = height / 2 + (y - height / 2) * zoom;
+      }
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0 &&
+          Number.isFinite(rect?.width) && rect.width > 0 &&
+          Number.isFinite(rect?.height) && rect.height > 0) {
+        return {screenX: x * rect.width / width, screenY: y * rect.height / height};
+      }
+    } catch (_) {
+      // PIXI global coordinates are already logical pixels when layout metadata is absent.
+    }
+    return {screenX: x, screenY: y};
+  }
+
   function projectPlayer(entity, roots) {
     try {
       const worldTransform = roots && roots.world && roots.world.world &&
@@ -100,7 +132,7 @@
           };
         }
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-          return { screenX: point.x, screenY: point.y };
+          return toCanvasCssPoint(point, roots);
         }
       }
     } catch (_) {
@@ -132,7 +164,7 @@
           };
         }
         if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-          return { screenX: point.x, screenY: point.y };
+          return toCanvasCssPoint(point, roots);
         }
       } catch (_) {
         // Try the next compatible PIXI display-object path.

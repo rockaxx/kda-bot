@@ -231,22 +231,6 @@
       return surface;
     }
 
-    function normalizePlayer(player, surface) {
-      const margin = 32;
-      const rawX = player.screenX;
-      const rawY = player.screenY;
-      const alreadyCss =
-        rawX >= -margin && rawX <= surface.width + margin &&
-        rawY >= -margin && rawY <= surface.height + margin;
-      if (alreadyCss) return player;
-      const scaleX = surface.width / Math.max(1, surface.sourceWidth);
-      const scaleY = surface.height / Math.max(1, surface.sourceHeight);
-      const scaledX = rawX * scaleX;
-      const scaledY = rawY * scaleY;
-      if (!Number.isFinite(scaledX) || !Number.isFinite(scaledY)) return player;
-      return { ...player, screenX: scaledX, screenY: scaledY };
-    }
-
     function erase(viewportSize = resize()) {
       if (context && typeof context.clearRect === "function") {
         context.clearRect(0, 0, viewportSize.width, viewportSize.height);
@@ -314,10 +298,9 @@
         return;
       }
 
-      const projectedPlayers = Array.from(
-        observations.values(),
-        player => normalizePlayer(player, viewportSize)
-      );
+      // MAIN publishes canvas-local CSS pixels. Offscreen coordinates must stay
+      // offscreen; inferring their units from their position creates ghost markers.
+      const projectedPlayers = Array.from(observations.values());
       const players = dependency.filterVisiblePlayers(
         projectedPlayers,
         latestSettings,

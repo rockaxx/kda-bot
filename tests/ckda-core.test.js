@@ -155,6 +155,62 @@ test("projects current-client world coordinates through the live world transform
   assert.deepEqual(projectPlayer(entity, roots), { screenX: 999.5, screenY: 450 });
 });
 
+test("maps every logical PIXI point to CSS using renderer dimensions, independent of position", () => {
+  const roots = {
+    world: {world: {worldTransform: {a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0}}},
+    renderer: {
+      core: {renderer: {screen: {width: 1920, height: 1080}, resolution: 2}},
+      canvas: {width: 3840, height: 2160,
+        getBoundingClientRect: () => ({left: 40, top: 20, width: 960, height: 540})}
+    }
+  };
+  for (const [x, y] of [[200, 400], [1800, 1000], [2200, -100]]) {
+    assert.deepEqual(projectPlayer({x, y}, roots), {screenX: x / 2, screenY: y / 2});
+  }
+});
+
+test("renderer resolution is applied once when logical screen dimensions are unavailable", () => {
+  const roots = {renderer: {
+    core: {renderer: {width: 2560, height: 1440, resolution: 2}},
+    canvas: {getBoundingClientRect: () => ({left: 0, top: 0, width: 1280, height: 720})}
+  }};
+  assert.deepEqual(projectPlayer({wrapper: {toGlobal: () => ({x: 1000, y: 500})}}, roots),
+    {screenX: 1000, screenY: 500});
+});
+
+test("renderer-level zoom follows the camera around the screen center", () => {
+  const renderer = {
+    cameraX: 10000, cameraY: 6000, zoomLevel: 1,
+    core: {renderer: {screen: {width: 1200, height: 800}, resolution: 2, setZoom() {}}},
+    canvas: {width: 2400, height: 1600,
+      getBoundingClientRect: () => ({left: 40, top: 20, width: 1200, height: 800})}
+  };
+  const roots = {renderer, world: {world: {worldTransform: {
+    a: 1, b: 0, c: 0, d: 1, tx: -9400, ty: -5600
+  }}}};
+  const entity = {x: 10400, y: 6200};
+  for (const [zoom, x, y] of [[1, 1000, 600], [0.5, 800, 500], [0.8, 920, 560], [1.5, 1200, 700]]) {
+    renderer.zoomLevel = zoom;
+    assert.deepEqual(projectPlayer(entity, roots), {screenX: x, screenY: y}, `zoom=${zoom}`);
+  }
+  renderer.cameraX = 10200;
+  roots.world.world.worldTransform.tx = -9600;
+  renderer.zoomLevel = 0.5;
+  assert.deepEqual(projectPlayer(entity, roots), {screenX: 700, screenY: 500});
+});
+
+test("container-level zoom is not applied twice and CSS scaling stays independent", () => {
+  const roots = {
+    renderer: {
+      zoomLevel: 0.5,
+      core: {renderer: {screen: {width: 1200, height: 800}, resolution: 2}},
+      canvas: {getBoundingClientRect: () => ({left: 40, top: 20, width: 600, height: 400})}
+    },
+    world: {world: {worldTransform: {a: 0.5, b: 0, c: 0, d: 0.5, tx: -4400, ty: -2600}}}
+  };
+  assert.deepEqual(projectPlayer({x: 10400, y: 6200}, roots), {screenX: 400, screenY: 250});
+});
+
 test("filters visible cloaked players without changing input records", () => {
   const players = [
     { id: 1, screenX: 20, screenY: 20, cloaked: true, observedAt: 900 },

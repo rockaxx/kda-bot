@@ -193,7 +193,7 @@ test("prioritizes the authoritative gamemap canvas over unrelated larger canvase
   assert.equal(dom.canvas.style.height, "911px");
 });
 
-test("canvas escapes the game body and maps backing-store coordinates to the live PIXI canvas", () => {
+test("canvas keeps logical positions unchanged and never pulls offscreen ships into view", () => {
   const gameCanvas = {
     id: "game",
     isConnected: true,
@@ -206,8 +206,9 @@ test("canvas escapes the game body and maps backing-store coordinates to the liv
   const dom = createDom({ gameCanvas });
   const canvas = createCkdaCanvas(dom);
   const snapshot = validSnapshot();
-  snapshot.players[0].screenX = 2000;
-  snapshot.players[0].screenY = 1000;
+  snapshot.players[0].screenX = 1000;
+  snapshot.players[0].screenY = 500;
+  snapshot.players.push({ ...snapshot.players[0], id: 8, screenX: 2000, screenY: 1000 });
   canvas.render(snapshot, validSettings({ displayMode: "all" }));
 
   dom.windowRef.runFrame(1000);
@@ -221,6 +222,25 @@ test("canvas escapes the game body and maps backing-store coordinates to the liv
     dom.context.calls.find(([name]) => name === "arc").slice(1, 3),
     [1000, 500]
   );
+  assert.equal(dom.context.calls.filter(([name]) => name === "arc").length, 1);
+  canvas.destroy();
+});
+
+test("a ship crossing the viewport edge is culled without jumping to half its position", () => {
+  const dom = createDom({ gameCanvas: {
+    id: "gamemap", width: 1280, height: 960, isConnected: true,
+    getBoundingClientRect: () => ({left: 0, top: 0, width: 640, height: 480})
+  }});
+  const canvas = createCkdaCanvas(dom);
+  for (const x of [630, 660, 680, 1000]) {
+    dom.context.calls.length = 0;
+    const snapshot = validSnapshot();
+    snapshot.players[0].screenX = x;
+    canvas.render(snapshot, validSettings({ displayMode: "all" }));
+    dom.windowRef.runFrame(0);
+    const points = dom.context.calls.filter(([name]) => name === "arc").map(call => call[1]);
+    assert.deepEqual(points, x <= 672 ? [x] : [], `screenX=${x}`);
+  }
   canvas.destroy();
 });
 

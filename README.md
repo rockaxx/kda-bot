@@ -24,12 +24,12 @@ loading image. Images remain in the extension's local Chrome storage.
 
 ## Install a GitHub release
 
-1. Download `KDA-v0.4.1.zip` from the latest GitHub release.
+1. Download `KDA-v0.4.2.zip` from the latest GitHub release.
 2. Extract the ZIP. Do not select the ZIP itself in Chrome.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.
 5. Click **Load unpacked**.
-6. Select the extracted `KDA-v0.4.1` folder containing `manifest.json`.
+6. Select the extracted `KDA-v0.4.2` folder containing `manifest.json`.
 7. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
@@ -88,3 +88,13 @@ check is still required after each game-client update.
 - Bundles the pinned Acorn parser locally; no parser download is needed in Chrome.
 - Regression tests cover renamed bindings, missing version labels, delayed startup,
   duplicate candidates, object replacement, and browser parser isolation.
+
+## 0.4.2 marker alignment fix
+
+- Keeps offscreen player markers offscreen instead of conditionally shrinking
+  their positions into the visible canvas.
+- Converts PIXI logical coordinates to canvas-local CSS pixels consistently using
+  renderer dimensions, including HiDPI and CSS-scaled game canvases.
+- Applies renderer-level game zoom around the screen center when the active
+  engine keeps that zoom outside the world transform; container-level PIXI zoom
+  remains applied once.
