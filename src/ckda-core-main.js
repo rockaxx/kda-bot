@@ -26,7 +26,21 @@
   function hasAllyRelation(value) {
     if (typeof value !== "string") return false;
     const normalized = value.trim().toLowerCase();
-    return /\b(?:ally|friend|own)\b/.test(normalized);
+    return /\b(?:ally|alliance|friend|own|pact)\b/.test(normalized);
+  }
+
+  function hasEnemyRelation(value) {
+    if (typeof value !== "string") return false;
+    return /\b(?:war|enemy|hostile)\b/.test(value.trim().toLowerCase());
+  }
+
+  function gameRelation(world, method, value) {
+    if (!world || typeof world[method] !== "function") return false;
+    try {
+      return world[method](value) === true;
+    } catch (_) {
+      return false;
+    }
   }
 
   function classifyPlayer(entity, roots) {
@@ -36,6 +50,7 @@
       !user ||
       !isCanonicalId(entity.ID) ||
       entity.isNpc === true ||
+      entity.isPal === true ||
       entity.isHero === true ||
       entity === user.ship ||
       entity.ID === user.userID
@@ -43,7 +58,13 @@
       return null;
     }
 
+    const world = roots && roots.world;
+    if (hasEnemyRelation(entity.clanRelation)) return "enemy";
+    if (hasAllyRelation(entity.clanRelation)) return "ally";
     if (
+      gameRelation(world, "isHeroGroupMember", entity.ID) ||
+      gameRelation(world, "isHeroClanMember", entity.clanId) ||
+      gameRelation(world, "isFactionIdHeroAlly", entity.faction) ||
       entity.clanId !== null &&
       entity.clanId !== undefined &&
       user.clanId !== null &&
@@ -52,7 +73,7 @@
     ) {
       return "ally";
     }
-    return hasAllyRelation(entity.clanRelation) ? "ally" : "enemy";
+    return "enemy";
   }
 
   function projectPlayer(entity, roots) {

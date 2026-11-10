@@ -350,6 +350,14 @@ test("C-KDA controls bind every label and expose schema-aligned numeric bounds",
         ishCooldownMs: { min: "1000", max: "120000", step: "1000" }
       }
     );
+    const refreshFps = controls.find(control => control.dataset.ckdaSetting === "refreshFps");
+    assert.deepEqual(refreshFps.children.map(option => [option.value, option.textContent]), [
+      ["30", "30 FPS"],
+      ["60", "60 FPS"],
+      ["120", "120 FPS"],
+      ["240", "240 FPS"],
+      ["360", "360 FPS"]
+    ]);
     overlay.destroy();
   } finally {
     global.MutationObserver = originalObserver;

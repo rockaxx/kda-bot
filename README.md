@@ -24,7 +24,7 @@ loading image. Images remain in the extension's local Chrome storage.
 
 ## Install a GitHub release
 
-1. Download `KDA-v0.3.0.zip` from the latest GitHub release.
+1. Download `KDA-v0.4.0.zip` from the latest GitHub release.
 2. Extract the ZIP. Do not select the ZIP itself in Chrome.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.

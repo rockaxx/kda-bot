@@ -53,6 +53,7 @@ test("classifies only eligible remote players", () => {
   const roots = playerRoots();
 
   assert.equal(classifyPlayer({ ID: 7, isNpc: true }, roots), null);
+  assert.equal(classifyPlayer({ ID: 70, isNpc: false, isPal: true }, roots), null);
   assert.equal(classifyPlayer(roots.user.ship, roots), null);
   assert.equal(
     classifyPlayer({ ID: roots.user.userID, isNpc: false, clanId: 99 }, roots),
@@ -88,6 +89,27 @@ test("normalizes textual ally relations", () => {
   );
   assert.equal(
     classifyPlayer({ ID: 10, isNpc: false, clanRelation: "unknown" }, roots),
+    "enemy"
+  );
+  assert.equal(
+    classifyPlayer({ ID: 11, isNpc: false, clanRelation: "alliance" }, roots),
+    "ally"
+  );
+});
+
+test("matches current-client faction, group, clan, and war relations", () => {
+  const roots = playerRoots();
+  roots.world = {
+    isHeroGroupMember(id) { return id === 8; },
+    isHeroClanMember(clanId) { return clanId === 123; },
+    isFactionIdHeroAlly(faction) { return faction === 2; }
+  };
+
+  assert.equal(classifyPlayer({ ID: 8, isNpc: false }, roots), "ally");
+  assert.equal(classifyPlayer({ ID: 9, isNpc: false, clanId: 123 }, roots), "ally");
+  assert.equal(classifyPlayer({ ID: 10, isNpc: false, faction: 2 }, roots), "ally");
+  assert.equal(
+    classifyPlayer({ ID: 8, isNpc: false, faction: 2, clanRelation: "war" }, roots),
     "enemy"
   );
 });

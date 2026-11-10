@@ -176,9 +176,10 @@ test("C-KDA command schema validates live ship design commands", () => {
 test("C-KDA command schema accepts only supported marker refresh rates", () => {
   const envelope = { channel: CKDA_CHANNEL, direction: "command",
     payload: { requestId: 1, type: "configure-refresh", fps: 60 } };
-  assert.equal(validateCkdaEnvelope(envelope).ok, true);
-  assert.equal(validateCkdaEnvelope({ ...envelope, payload: { ...envelope.payload, fps: 30 } }).ok, true);
-  for (const fps of [0, 15, 59, 120, "60"]) {
+  for (const fps of [30, 60, 120, 240, 360]) {
+    assert.equal(validateCkdaEnvelope({ ...envelope, payload: { ...envelope.payload, fps } }).ok, true);
+  }
+  for (const fps of [0, 15, 59, 119, 361, "60"]) {
     assert.equal(validateCkdaEnvelope({ ...envelope, payload: { ...envelope.payload, fps } }).ok, false);
   }
 });

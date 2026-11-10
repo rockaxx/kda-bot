@@ -25,6 +25,7 @@
     "peacemaker", "saturn", "bronze", "silver", "gold", "crimson",
     "frost", "ignite", "plus-carbonite", "iron", "regalia"
   ]);
+  const REFRESH_RATES = new Set([30, 60, 120, 240, 360]);
   const COMMAND_FIELDS = Object.freeze({
     "set-premium": ["enabled"],
     "set-design-rank": ["rankId"],
@@ -186,8 +187,7 @@
           if (payload.type === "configure-effects" && fields.some(key =>
             !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000
           )) errors.push("effect duration is invalid");
-          if (payload.type === "configure-refresh" &&
-              payload.fps !== 30 && payload.fps !== 60) {
+          if (payload.type === "configure-refresh" && !REFRESH_RATES.has(payload.fps)) {
             errors.push("refresh fps is invalid");
           }
         }

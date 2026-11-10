@@ -23,7 +23,7 @@
 
   const DISPLAY_MODES = new Set(["masked-only", "all"]);
   const SHAPES = new Set(["circle", "square", "triangle", "plus", "star"]);
-  const REFRESH_RATES = new Set([30, 60]);
+  const REFRESH_RATES = new Set([30, 60, 120, 240, 360]);
   const COLOR = /^#[0-9a-f]{6}$/i;
   const BOOLEAN_KEYS = new Set([
     "overlayEnabled",
@@ -68,7 +68,7 @@
         error = "shape is invalid";
       } else if (key === "refreshFps") {
         valid = REFRESH_RATES.has(value);
-        error = "refreshFps must be 30 or 60";
+        error = "refreshFps must be 30, 60, 120, 240, or 360";
       } else if (key === "allyColor" || key === "enemyColor") {
         valid = typeof value === "string" && COLOR.test(value);
         error = `${key} is invalid`;

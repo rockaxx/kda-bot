@@ -39,7 +39,7 @@ test("invalid C-KDA values fall back field by field", () => {
   assert.deepEqual(result.errors, [
     "shape is invalid",
     "sizePx must be from 3 to 200",
-    "refreshFps must be 30 or 60",
+    "refreshFps must be 30, 60, 120, 240, or 360",
     "premiumOverride must be a boolean"
   ]);
 });
@@ -73,6 +73,14 @@ test("normalizes every documented valid setting and drops unknown keys", () => {
   assert.equal(result.value.premiumOverride, true);
   assert.equal(Object.hasOwn(result.value, "ignored"), false);
   assert.equal(Object.isFrozen(result.value), true);
+});
+
+test("accepts every supported high marker refresh rate", () => {
+  for (const refreshFps of [30, 60, 120, 240, 360]) {
+    const result = normalizeCkdaSettings({ refreshFps });
+    assert.equal(result.ok, true);
+    assert.equal(result.value.refreshFps, refreshFps);
+  }
 });
 
 test("rejects truthy booleans and invalid numeric, colour, and enum values", () => {

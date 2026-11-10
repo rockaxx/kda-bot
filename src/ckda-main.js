@@ -20,6 +20,7 @@
   const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
   const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
+  const REFRESH_RATES = new Set([30, 60, 120, 240, 360]);
   const LEASE_DURATION_MS = 120000;
   const LEASE_CHECK_MS = 5000;
 
@@ -421,7 +422,7 @@
         ? options.premiumState : "inactive";
     let stopped = false;
     let timer = null;
-    let refreshFps = options.refreshFps === 30 ? 30 : 60;
+    let refreshFps = REFRESH_RATES.has(options.refreshFps) ? options.refreshFps : 60;
     let lastWorld = roots && roots.world;
     let lastMapId = Number(lastWorld && lastWorld.mapId);
     let playerCursor = 0;
@@ -489,7 +490,7 @@
     }
 
     function schedule(fps = refreshFps) {
-      const nextFps = fps === 30 ? 30 : 60;
+      const nextFps = REFRESH_RATES.has(fps) ? fps : 60;
       if (timer !== null && windowRef && typeof windowRef.clearInterval === "function") {
         windowRef.clearInterval(timer);
       }

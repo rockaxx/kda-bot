@@ -404,7 +404,8 @@
         const options = key === "displayMode"
           ? [["masked-only", "Masked only"], ["all", "All players"]]
           : key === "refreshFps"
-            ? [["30", "30 FPS"], ["60", "60 FPS"]]
+            ? [["30", "30 FPS"], ["60", "60 FPS"], ["120", "120 FPS"],
+              ["240", "240 FPS"], ["360", "360 FPS"]]
             : [["circle", "Circle"], ["square", "Square"], ["triangle", "Triangle"], ["plus", "Plus"], ["star", "Star"]];
         for (const [value, text] of options) {
           const option = documentRef.createElement("option");

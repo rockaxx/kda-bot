@@ -491,6 +491,7 @@ function mapShip(id, fields = {}) {
 function liveRoots(overrides = {}) {
   const localShip = mapShip(77, { clanId: 10 });
   const npc = mapShip(50, { isNpc: true });
+  const pal = mapShip(51, { isPal: true });
   const enemy = mapShip(8, { isCloaked: "yes" });
   const ally = mapShip(9, { clanId: 10 });
   const malformed = mapShip(undefined);
@@ -503,6 +504,7 @@ function liveRoots(overrides = {}) {
       MAP_SHIPS: new Map([
         [77, localShip],
         [50, npc],
+        [51, pal],
         [8, enemy],
         [9, ally],
         [10, malformed]
@@ -645,6 +647,8 @@ test("publisher sends on cadence, clears cooldowns on world change, and stops", 
 
   publisher.setFps(30);
   assert.equal(scheduled.delay, 1000 / 30);
+  publisher.setFps(360);
+  assert.equal(scheduled.delay, 1000 / 360);
 
   roots.world = { ...roots.world, mapId: 18 };
   publisher.refresh();
