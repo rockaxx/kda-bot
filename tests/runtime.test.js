@@ -95,7 +95,7 @@ test("controller fault disarms active runtime", () => {
   const item = fixture();
   item.runtime.start(snapshot());
 
-  item.runtime.receiveSnapshot(snapshot({ clientVersion: "unknown" }));
+  item.runtime.receiveSnapshot(snapshot({ connectionState: "disconnected" }));
 
   assert.equal(item.runtime.isActive(), false);
   assert.equal(item.controller.getState().name, "FAULT");

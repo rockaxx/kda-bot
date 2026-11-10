@@ -1,21 +1,33 @@
 {
   "manifest_version": 3,
   "name": "KDA",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "minimum_chrome_version": "111",
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage"
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/c-kda.gif", "assets/besto.gif", "assets/Models.steam.json"],
-      "matches": ["https://steam.space-aces.com/*"]
+      "resources": [
+        "assets/c-kda.gif",
+        "assets/besto.gif",
+        "assets/Models.steam.json"
+      ],
+      "matches": [
+        "https://steam.space-aces.com/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["https://steam.space-aces.com/gameNew*"],
+      "matches": [
+        "https://steam.space-aces.com/gameNew*"
+      ],
       "js": [
         "src/namespace-main.js",
         "src/design-model-main.js",
+        "src/vendor/acorn.js",
         "src/source-patch.js",
         "src/page-adapter.js",
         "src/ckda-schema-main.js",
@@ -27,8 +39,12 @@
       "world": "MAIN"
     },
     {
-      "matches": ["https://steam.space-aces.com/gameNew*"],
-      "css": ["src/loading-screen.css"],
+      "matches": [
+        "https://steam.space-aces.com/gameNew*"
+      ],
+      "css": [
+        "src/loading-screen.css"
+      ],
       "js": [
         "src/namespace.js",
         "src/loading-image-settings.js",

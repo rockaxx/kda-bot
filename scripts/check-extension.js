@@ -22,6 +22,7 @@ const expectedScripts = {
   MAIN: [
     "src/namespace-main.js",
     "src/design-model-main.js",
+    "src/vendor/acorn.js",
     "src/source-patch.js",
     "src/page-adapter.js",
     "src/ckda-schema-main.js",
@@ -184,12 +185,6 @@ const maintainedSource = fs.readdirSync(sourceDir)
   .filter((name) => name.endsWith(".js"))
   .map((name) => fs.readFileSync(path.join(sourceDir, name), "utf8"))
   .join("\n");
-if (!/CKDA_SUPPORTED_CLIENT_VERSION\s*=\s*["']1\.9\.0\.052["']/.test(maintainedSource)) {
-  errors.push("missing supported C-KDA client version marker");
-}
-if (!maintainedSource.includes("1.9.0.0996")) {
-  errors.push("missing live 1.9.0.0996 client support");
-}
 if (
   !/const CHANNEL\s*=\s*["']sa-bot-v1["']/.test(maintainedSource) ||
   !/const CKDA_CHANNEL\s*=\s*["']sa-ckda-v1["']/.test(maintainedSource)

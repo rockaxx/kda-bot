@@ -9,8 +9,6 @@
 
   const CKDA_CHANNEL = "sa-ckda-v1";
   const CKDA_MAX_ENVELOPE_BYTES = 4096;
-  const CKDA_SUPPORTED_CLIENT_VERSION = "1.9.0.052";
-  const CKDA_CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const CONNECTION_STATES = new Set([
     "connected",
     "connecting",
@@ -98,7 +96,7 @@
     if (!isNonNegativeFinite(value.timestamp)) {
       errors.push("timestamp is invalid");
     }
-    if (!CKDA_CLIENT_VERSION_PATTERN.test(value.clientVersion)) {
+    if (typeof value.clientVersion !== "string" || value.clientVersion.length === 0 || value.clientVersion.length > 128) {
       errors.push("clientVersion is invalid");
     }
     if (!CONNECTION_STATES.has(value.connectionState)) {

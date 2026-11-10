@@ -473,7 +473,7 @@ test("client source export takes priority over fallback diagnostic JSON", () => 
   );
 });
 
-test("any structurally patched four-part client version enables the adapter gate", () => {
+test("capability discovery enables the adapter regardless of version metadata", () => {
   assert.equal(
     isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "1.9.0.052" }),
     true
@@ -484,7 +484,7 @@ test("any structurally patched four-part client version enables the adapter gate
   );
   assert.equal(
     isSupportedDiagnostic({ patchStatus: "patched", clientVersion: "future" }),
-    false
+    true
   );
   assert.equal(
     isSupportedDiagnostic({ patchStatus: "unsupported", clientVersion: "1.9.0.052" }),

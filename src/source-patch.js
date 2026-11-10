@@ -1,185 +1,140 @@
 (function expose(root, factory) {
-  const api = factory();
+  const parser = typeof module === "object" && module.exports
+    ? require("./vendor/acorn.js") : {parse: root.__SA_BOT_MAIN_V1__.parseJavaScript};
+  const api = factory(parser);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) Object.assign(root.__SA_BOT_MAIN_V1__, api);
-})(typeof window === "object" ? window : null, function createApi() {
+})(typeof window === "object" ? window : null, function createApi(parser) {
   "use strict";
 
-  const CLIENT_VERSION = "1.9.0.052";
-  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
-  const BUILD_MARKER_PATTERN =
-    /const\s+[_$A-Za-z][_$A-Za-z0-9]*\s*=\s*(['"])(\d+\.\d+\.\d+\.\d+)\1\s*;/g;
-  const CLIENT_FINGERPRINTS = Object.freeze([
-    Object.freeze({
-      version: "1.9.0.0996",
-      markers: Object.freeze([
-        "_0x38052d['mapId']",
-        "_0x4086e3['ship']",
-        "_0x5977d3['gamepadTargeter']",
-        "_0x30ad6d['initListeners']",
-        "_0x37fa46['followX']",
-        "_0x598486['handleWriteLog']",
-        "_0x6d416c['initiateConnection']()",
-        "['addEmpNew']",
-        "'instaShield'",
-        "'tshield'",
-        "['updatePremium']"
-      ]),
-      roots: Object.freeze({
-        input: "_0x30ad6d",
-        ui: "_0x598486",
-        user: "_0x4086e3",
-        network: "_0x6d416c",
-        camera: "_0x37fa46",
-        world: "_0x38052d",
-        renderer: "_0x5977d3"
-      })
-    }),
-    Object.freeze({
-      version: "1.9.0.052",
-      markers: Object.freeze([
-        "_0x1bdc1e['mapId']",
-        "_0x13411e['ship']",
-        "_0x456f25['gamepadTargeter']",
-        "_0x29d06a['initListeners']",
-        "_0xa7de8f['followX']",
-        "_0x3ce5a6['handleWriteLog']",
-        "_0x3a7293['initiateConnection']()",
-        "['addEmpNew']",
-        "'instaShield'",
-        "'tshield'",
-        "['updatePremium']"
-      ]),
-      roots: Object.freeze({
-        input: "_0x29d06a",
-        ui: "_0x3ce5a6",
-        user: "_0x13411e",
-        network: "_0x3a7293",
-        camera: "_0xa7de8f",
-        world: "_0x1bdc1e",
-        renderer: "_0x456f25"
-      })
-    }),
-    Object.freeze({
-      version: "1.9.0.051",
-      markers: Object.freeze([
-        "_0x27bad5['mapId']",
-        "_0x4e6c8d['ship']",
-        "_0x4bfb8d['gamepadTargeter']",
-        "_0x312959['initListeners']",
-        "_0x5608bd['followX']",
-        "_0x3154af['handleWriteLog']",
-        "_0x1db4fd['initiateConnection']()",
-        "['addEmpNew']",
-        "'instaShield'",
-        "'tshield'",
-        "['updatePremium']"
-      ]),
-      roots: Object.freeze({
-        input: "_0x312959",
-        ui: "_0x3154af",
-        user: "_0x4e6c8d",
-        network: "_0x1db4fd",
-        camera: "_0x5608bd",
-        world: "_0x27bad5",
-        renderer: "_0x4bfb8d"
-      })
-    }),
-    Object.freeze({
-      version: "1.9.0.049",
-      markers: Object.freeze([
-        "_0x8541dd['mapId']",
-        "_0x3d592['ship']",
-        "_0x5d1a8d['gamepadTargeter']",
-        "_0xc13e48['initListeners']",
-        "_0x1e1267['followX']",
-        "_0x313249['handleWriteLog']",
-        "_0x2e4b9e['initiateConnection']()"
-      ]),
-      roots: Object.freeze({
-        input: "_0xc13e48",
-        ui: "_0x313249",
-        user: "_0x3d592",
-        network: "_0x2e4b9e",
-        camera: "_0x1e1267",
-        world: "_0x8541dd",
-        renderer: "_0x5d1a8d"
-      })
-    }),
-    Object.freeze({
-      version: "1.9.0.045",
-      markers: Object.freeze([
-        "_0x429744['mapId']",
-        "_0x22a0bf['ship']",
-        "_0x607b9['gamepadTargeter']",
-        "_0x229c50['initListeners']"
-      ]),
-      roots: Object.freeze({
-        input: "_0x229c50",
-        ui: "_0x594165",
-        user: "_0x22a0bf",
-        network: "null",
-        camera: "_0x1ceb4c",
-        world: "_0x429744",
-        renderer: "_0x607b9"
-      })
-    })
-  ]);
-  const SENSITIVE_KEY =
-    /token|cookie|session|auth|password|email|chat|message|payload|socket|credential/i;
+  const SENSITIVE_KEY = /token|cookie|session|auth|password|email|chat|message|payload|socket|credential/i;
+  const registries = new WeakMap();
+  const methods = (value, names) => names.every(name => typeof value[name] === "function");
+  const roles = {
+    user: value => value.ship && typeof value.ship === "object" &&
+      (typeof value.userID === "string" || Number.isFinite(value.userID)),
+    world: value => value.MAP_SHIPS && methods(value.MAP_SHIPS, ["forEach", "get"]) &&
+      Number.isFinite(Number(value.mapId)),
+    network: value => typeof value.connected === "boolean" &&
+      // Chat shares sendPacket/initiateConnection; game networking also handles map-server switches.
+      methods(value, ["initiateConnection", "sendPacket", "getHasSwitched"]),
+    camera: value => Number.isFinite(value.followX) && Number.isFinite(value.followY),
+    input: value => methods(value, ["initListeners"]),
+    ui: value => methods(value, ["handleWriteLog"]),
+    renderer: value => value.canvas && "gamepadTargeter" in value
+  };
 
-  function unsupported(source, reason) {
-    return { status: "unsupported", source, version: null, reason };
+  function registerClientCandidates(windowRef, readers, version = "unknown") {
+    if (!windowRef || !Array.isArray(readers)) return;
+    let registry = registries.get(windowRef);
+    if (!registry) {
+      registry = { readers: [], version, roots: {} };
+      function read(reader, role) {
+        try {
+          const value = reader();
+          return value && typeof value === "object" && roles[role](value) ? value : null;
+        } catch (_) { return null; }
+      }
+      function locate(role) {
+        let found = null;
+        for (const candidate of registry.readers) {
+          const value = read(candidate, role);
+          if (!value) continue;
+          if (found && found !== value) return null;
+          found = value;
+        }
+        return found;
+      }
+      for (const role of Object.keys(roles)) {
+        Object.defineProperty(registry.roots, role, { enumerable: true, get: () => locate(role) });
+      }
+      Object.defineProperty(registry.roots, "version", { enumerable: true, get: () => registry.version });
+      Object.freeze(registry.roots);
+      Object.defineProperty(windowRef, "__SA_BOT_ROOTS__", {
+        configurable: true,
+        get() {
+          return locate("user") && locate("world") && locate("network") ? registry.roots : null;
+        }
+      });
+      registries.set(windowRef, registry);
+    }
+    registry.readers.push(...readers.filter(reader => typeof reader === "function"));
+    if (version !== "unknown") registry.version = version;
   }
 
-  function isSupportedClientVersion(value) {
-    return CLIENT_VERSION_PATTERN.test(String(value || "").replace(/^n/, ""));
+  function unsupported(source, reason) {
+    return {status: "unsupported", source, version: null, reason};
+  }
+
+  function walk(node, visit) {
+    if (!node || typeof node.type !== "string") return;
+    visit(node);
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(child => walk(child, visit));
+      else if (value && typeof value.type === "string") walk(value, visit);
+    }
+  }
+
+  function bindingNames(pattern, names) {
+    if (!pattern) return;
+    if (pattern.type === "Identifier") names.add(pattern.name);
+    else if (pattern.type === "RestElement") bindingNames(pattern.argument, names);
+    else if (pattern.type === "AssignmentPattern") bindingNames(pattern.left, names);
+    else if (pattern.type === "ObjectPattern") pattern.properties.forEach(p => bindingNames(p.value || p.argument, names));
+    else if (pattern.type === "ArrayPattern") pattern.elements.forEach(p => bindingNames(p, names));
   }
 
   function patchGameSource(source) {
     if (typeof source !== "string") return unsupported(source, "not-text");
-    const fingerprints = CLIENT_FINGERPRINTS.filter(({ markers }) =>
-      markers.every((marker) => source.includes(marker))
-    );
-    if (fingerprints.length !== 1) {
-      return unsupported(source, "root-fingerprint-mismatch");
+    let tree;
+    try { tree = parser.parse(source, {ecmaVersion: "latest", sourceType: "script"}); }
+    catch (_) { return unsupported(source, "client-parse-failed"); }
+    const scopes = [tree];
+    // Capture closures in immediately invoked bundles as well as top-level scripts.
+    walk(tree, node => {
+      if (node.type !== "CallExpression") return;
+      const callee = node.callee.type === "MemberExpression" ? node.callee.object : node.callee;
+      if (["FunctionExpression", "ArrowFunctionExpression"].includes(callee.type) &&
+          callee.body.type === "BlockStatement") scopes.push(callee.body);
+    });
+    const edits = [];
+    let version = "unknown";
+    for (const scope of scopes) {
+      const names = new Set();
+      const properties = new Set();
+      for (const statement of scope.body) {
+        if (statement.type !== "VariableDeclaration") continue;
+        for (const declaration of statement.declarations) {
+          bindingNames(declaration.id, names);
+          if (declaration.init?.type === "Literal" && typeof declaration.init.value === "string" &&
+              /^\d+(?:\.\d+){3}$/.test(declaration.init.value)) version = declaration.init.value;
+        }
+      }
+      walk(scope, node => {
+        const key = node.type === "MemberExpression" ? node.property :
+          ["Property", "MethodDefinition", "PropertyDefinition"].includes(node.type) ? node.key : null;
+        if (key?.type === "Literal") properties.add(key.value);
+        else if (key?.type === "Identifier" && !node.computed) properties.add(key.name);
+      });
+      // Only instrument a game-shaped scope; runtime capabilities choose its objects.
+      if (names.size < 2 || !properties.has("ship") ||
+          !(properties.has("mapId") || properties.has("MAP_SHIPS")) ||
+          !(properties.has("initListeners") || properties.has("gamepadTargeter"))) continue;
+      let position = scope.type === "Program" ? (tree.start || 0) : scope.start + 1;
+      for (const statement of scope.body) {
+        if (!statement.directive) break;
+        position = statement.end;
+      }
+      const readers = [...names].map(name => "()=>" + name).join(",");
+      edits.push({position, readers});
     }
-    const [fingerprint] = fingerprints;
-    const buildMarkers = [...source.matchAll(BUILD_MARKER_PATTERN)];
-    if (buildMarkers.length > 1) {
-      return unsupported(source, "version-marker-ambiguous");
+    if (!edits.length) return unsupported(source, "game-scope-not-found");
+    let patched = source;
+    for (const {position, readers} of edits.sort((a, b) => b.position - a.position)) {
+      const exposure = ';window.__SA_BOT_MAIN_V1__.registerClientCandidates(window,[' + readers + '],' + JSON.stringify(version) + ');';
+      patched = patched.slice(0, position) + exposure + patched.slice(position);
     }
-
-    const version = buildMarkers.length === 1
-      ? buildMarkers[0][2]
-      : fingerprint.version;
-    const versionExpression = `"${version}"`;
-    const exposure =
-      'if(!Object.prototype.hasOwnProperty.call(window,"__SA_BOT_ROOTS__")){' +
-      'Object.defineProperty(window,"__SA_BOT_ROOTS__",{configurable:true,value:Object.freeze({' +
-      `version:${versionExpression},` +
-      `get input(){return ${fingerprint.roots.input};},` +
-      `get ui(){return ${fingerprint.roots.ui};},` +
-      `get user(){return ${fingerprint.roots.user};},` +
-      `get network(){return ${fingerprint.roots.network};},` +
-      `get camera(){return ${fingerprint.roots.camera};},` +
-      `get world(){return ${fingerprint.roots.world};},` +
-      `get renderer(){return ${fingerprint.roots.renderer};}` +
-      '})});}';
-    const insertionIndex = buildMarkers.length === 1
-      ? buildMarkers[0].index + buildMarkers[0][0].length
-      : 0;
-    return {
-      status: "patched",
-      source:
-        source.slice(0, insertionIndex) +
-        exposure +
-        source.slice(insertionIndex),
-      version,
-      reason: buildMarkers.length === 1
-        ? "recognized-client"
-        : "recognized-structural-client"
-    };
+    return {status: "patched", source: patched, version, reason: "capability-discovery"};
   }
 
   function summarizeRoot(value, options) {
@@ -225,5 +180,5 @@
     return visit(value, 0);
   }
 
-  return { CLIENT_VERSION, isSupportedClientVersion, patchGameSource, summarizeRoot };
+  return { patchGameSource, registerClientCandidates, summarizeRoot };
 });

@@ -24,12 +24,12 @@ loading image. Images remain in the extension's local Chrome storage.
 
 ## Install a GitHub release
 
-1. Download `KDA-v0.4.0.zip` from the latest GitHub release.
+1. Download `KDA-v0.4.1.zip` from the latest GitHub release.
 2. Extract the ZIP. Do not select the ZIP itself in Chrome.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.
 5. Click **Load unpacked**.
-6. Select the extracted `KDA-v0.3.0` folder containing `manifest.json`.
+6. Select the extracted `KDA-v0.4.1` folder containing `manifest.json`.
 7. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
@@ -46,15 +46,20 @@ does not auto-update it from GitHub.
   reload the game. Click **DEFAULT BESTO** and reload to restore the bundled GIF.
 - Press `N` to hide or show the panel.
 
-Visual overrides are local to the browser. A game client update can change its
-runtime structure; if KDA reports an unsupported client, disable the extension
-and wait for a reviewed compatibility update.
+Visual overrides are local to the browser. KDA discovers live game objects by
+capabilities, without a client-version allowlist or fixed obfuscated variable
+names. Version labels are diagnostic metadata only. Top-level and immediately
+invoked bundle scopes are supported, including delayed initialization. Changes
+to the actual game APIs or loading format can still require an adapter update.
+Ambiguous or missing game objects are not guessed.
 
 ## Verify and package from source
 
 Requirements: Node.js and Windows PowerShell.
 
 ```powershell
+npm ci
+npm run vendor:parser
 npm test
 npm run check
 npm run release:pack
@@ -74,3 +79,12 @@ the unpacked extension data is removed.
 Automated tests and static checks cover extension structure, settings,
 validation, marker/design logic, and release assets. A supervised browser/game
 check is still required after each game-client update.
+
+## 0.4.1 compatibility update
+
+- Replaces numbered-client fingerprints with capability-based object discovery.
+- Distinguishes game networking from chat networking.
+- Keeps waiting for slow game initialization and recovers UI readiness afterward.
+- Bundles the pinned Acorn parser locally; no parser download is needed in Chrome.
+- Regression tests cover renamed bindings, missing version labels, delayed startup,
+  duplicate candidates, object replacement, and browser parser isolation.

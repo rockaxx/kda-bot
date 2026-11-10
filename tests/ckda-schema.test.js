@@ -39,13 +39,14 @@ test("accepts C-KDA snapshots and copies only declared keys", () => {
   assert.notEqual(result.value.players[0], input.players[0]);
 });
 
-test("accepts future four-part client versions and rejects malformed versions", () => {
+test("accepts version labels as metadata and rejects invalid metadata", () => {
   const result = validateCkdaSnapshot({
     ...validSnapshot,
     clientVersion: "1.9.0.7777"
   });
   assert.equal(result.ok, true);
-  const malformed = validateCkdaSnapshot({ ...validSnapshot, clientVersion: "future" });
+  assert.equal(validateCkdaSnapshot({ ...validSnapshot, clientVersion: "future" }).ok, true);
+  const malformed = validateCkdaSnapshot({ ...validSnapshot, clientVersion: {} });
   assert.equal(malformed.ok, false);
   assert.deepEqual(malformed.errors, ["clientVersion is invalid"]);
 });

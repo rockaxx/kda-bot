@@ -160,6 +160,7 @@ test("loads C-KDA contracts before their MAIN and isolated consumers", () => {
   assert.deepEqual(main.js, [
     "src/namespace-main.js",
     "src/design-model-main.js",
+    "src/vendor/acorn.js",
     "src/source-patch.js",
     "src/page-adapter.js",
     "src/ckda-schema-main.js",

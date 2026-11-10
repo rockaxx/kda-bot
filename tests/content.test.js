@@ -468,14 +468,24 @@ test("unsupported source fingerprint diagnostics mark C-KDA unsupported even whe
   assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 
-test("malformed adapter version clears C-KDA markers without touching BOT runtime", () => {
+test("an unnumbered adapter preserves C-KDA readiness without touching BOT runtime", () => {
   const app = setup();
   app.snapshot(snapshot());
   app.diagnostic({ patchStatus: "patched", clientVersion: "future" });
-  assert.equal(app.calls.statusText, "Unsupported client");
-  assert.equal(app.model().ckdaSnapshot, null);
-  assert.deepEqual(app.calls.canvas.at(-1), { clear: true });
+  assert.notEqual(app.calls.statusText, "Unsupported client");
+  assert.notEqual(app.model().ckdaSnapshot, null);
   assert.equal(app.calls.starts + app.calls.stops, 0);
+});
+
+test("a late capability-ready diagnostic recovers an earlier unavailable adapter", () => {
+  const app = setup();
+  app.diagnostic({patchStatus: "unsupported", clientVersion: null});
+  app.snapshot(snapshot());
+  assert.equal(app.model().ckdaSnapshot, null);
+  app.diagnostic({patchStatus: "patched", clientVersion: "unknown", reason: "capabilities-ready"});
+  app.snapshot(snapshot());
+  assert.notEqual(app.model().ckdaSnapshot, null);
+  assert.notEqual(app.calls.statusText, "Unsupported client");
 });
 
 test("rejected C-KDA storage save returns failure without applying settings or Premium", async () => {

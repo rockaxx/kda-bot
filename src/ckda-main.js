@@ -16,8 +16,6 @@
 })(typeof window === "object" ? window : null, function createApi(dependency) {
   "use strict";
 
-  const CLIENT_VERSION = "1.9.0.052";
-  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const EFFECT_HOOK_MARK = Symbol("ckda-effect-hook");
   const INSTALLATION_MARK = Symbol.for("sa-ckda-installation-v1");
   const REFRESH_RATES = new Set([30, 60, 120, 240, 360]);
@@ -25,12 +23,9 @@
   const LEASE_CHECK_MS = 5000;
 
   function normalizedClientVersion(value) {
-    return String(value || "").replace(/^n/, "");
+    return String(value || "unknown").replace(/^n(?=\d)/, "").slice(0, 128);
   }
 
-  function supportedClientVersion(value) {
-    return CLIENT_VERSION_PATTERN.test(normalizedClientVersion(value));
-  }
 
   function createPremiumOverride(roots, documentRef) {
     let requested = false;
@@ -47,13 +42,6 @@
       }
     }
 
-    function compatibleRoots() {
-      try {
-        return supportedClientVersion(roots && roots.version);
-      } catch (_) {
-        return false;
-      }
-    }
 
     function restoreProperty(record) {
       try {
@@ -80,7 +68,6 @@
 
     function install(user) {
       if (
-        !compatibleRoots() ||
         !user ||
         (typeof user !== "object" && typeof user !== "function")
       ) {
@@ -351,6 +338,11 @@
 
   function createCkdaSnapshot(roots, cooldowns, premiumState, timestamp) {
     try {
+      // Resolve live bindings once per publication, not once per tracked player.
+      roots = roots && {
+        user: roots.user, world: roots.world, network: roots.network,
+        camera: roots.camera, renderer: roots.renderer, version: roots.version
+      };
       const world = roots && roots.world;
       const user = roots && roots.user;
       const ships = world && world.MAP_SHIPS;
@@ -364,7 +356,6 @@
         !user.ship ||
         !roots.network ||
         roots.network.connected !== true ||
-        !supportedClientVersion(roots.version) ||
         !Number.isInteger(mapId) ||
         mapId < 1 ||
         typeof ships.forEach !== "function" ||
@@ -624,10 +615,7 @@
       try {
         const candidate = windowRef.__SA_BOT_ROOTS__;
         if (!candidate) return;
-        if (!supportedClientVersion(candidate.version)) {
-          result({ state: "unsupported-client" });
-          return;
-        }
+        if (!candidate.user?.ship || !candidate.world) return;
         roots = candidate;
         cooldowns = dependency.createCooldownRegistry(now);
         premium = createPremiumOverride(roots, windowRef.document);

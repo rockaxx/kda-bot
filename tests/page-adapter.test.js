@@ -18,7 +18,7 @@ class FakeBlob {
 }
 
 const recognizedSource =
-  "const _0x416562='1.9.0.045';" +
+  "const _0x416562='1.9.0.045'; let _0x429744, _0x22a0bf, _0x607b9, _0x229c50;" +
   "_0x429744['mapId'];_0x22a0bf['ship'];" +
   "_0x607b9['gamepadTargeter'];_0x229c50['initListeners'];";
 
@@ -34,7 +34,7 @@ test("Blob proxy patches only recognized JavaScript source", () => {
     type: "application/javascript"
   });
 
-  assert.match(blob.parts[0], /__SA_BOT_ROOTS__/);
+  assert.match(blob.parts[0], /registerClientCandidates/);
   assert.equal(statuses[0].status, "patched");
 });
 
@@ -52,6 +52,43 @@ test("Blob proxy preserves non-JavaScript parts", () => {
 
   assert.equal(blob.parts, parts);
   assert.deepEqual(blob.options, { type: "text/plain" });
+});
+
+test("Blob proxy supports multipart JavaScript and MIME parameters", () => {
+  const PatchedBlob = createPatchedBlobConstructor(FakeBlob, patchGameSource, () => {});
+  const blob = new PatchedBlob([recognizedSource.slice(0, 30), recognizedSource.slice(30)], {
+    type: "text/javascript; charset=utf-8"
+  });
+  assert.match(blob.parts.join(""), /registerClientCandidates/);
+});
+
+test("adapter keeps waiting after 30 seconds and initializes when late roots arrive", () => {
+  const vm = require("node:vm");
+  const fs = require("node:fs");
+  let clock = 0;
+  let timer;
+  const messages = [];
+  const intervals = [];
+  const window = {
+    __SA_BOT_MAIN_V1__: require("../src/source-patch.js"),
+    Blob: FakeBlob,
+    document: {readyState: "complete"},
+    location: {pathname: "/gameNew"},
+    setTimeout(fn) { timer = fn; return 1; },
+    clearTimeout() {},
+    setInterval(fn) { intervals.push(fn); return intervals.length; },
+    addEventListener() {},
+    postMessage(message) { messages.push(message); }
+  };
+  vm.runInNewContext(fs.readFileSync(require.resolve("../src/page-adapter.js"), "utf8"), {
+    window, Date: {now: () => clock}
+  });
+  clock = 45000;
+  timer();
+  window.__SA_BOT_ROOTS__ = liveRoots();
+  timer();
+  assert.ok(intervals.length > 0, "snapshot publisher must start after a slow load");
+  assert.equal(messages.filter(m => m.direction === "diagnostic").at(-1).payload.patchStatus, "patched");
 });
 
 test("diagnostic publisher includes captured client source separately", () => {
@@ -351,7 +388,7 @@ test("action executor stays disarmed until an explicit arm request", () => {
   assert.equal(fixture.messages.at(-1).payload.reason, "not-armed");
 });
 
-test("action executor refuses to arm a malformed client version", () => {
+test("action executor uses capabilities instead of a version gate", () => {
   const fixture = actionFixture();
   fixture.roots.version = "future";
 
@@ -360,8 +397,7 @@ test("action executor refuses to arm a malformed client version", () => {
     type: "arm"
   }));
 
-  assert.equal(fixture.executor.isArmed(), false);
-  assert.equal(fixture.messages.at(-1).payload.reason, "unsupported-client-version");
+  assert.equal(fixture.executor.isArmed(), true);
 });
 
 test("action executor refuses to arm without normal client navigation", () => {

@@ -54,8 +54,6 @@
     ["plus-carbonite", "Goliath Plus Carbonite"], ["iron", "Goliath Iron"],
     ["regalia", "Goliath Regalia"]
   ].map(Object.freeze));
-  const EXPECTED_CLIENT_VERSION = "1.9.0.052";
-  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
 
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
@@ -155,8 +153,7 @@
   function isSupportedDiagnostic(diagnostic) {
     return Boolean(
       diagnostic &&
-      diagnostic.patchStatus === "patched" &&
-      CLIENT_VERSION_PATTERN.test(String(diagnostic.clientVersion || "").replace(/^n/, ""))
+      diagnostic.patchStatus === "patched"
     );
   }
 

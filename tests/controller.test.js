@@ -62,7 +62,7 @@ test("selects NPCs on whichever map is currently active", () => {
 test("accepts a future four-part client version", () => {
   const controller = createController({ settings, now: () => 1000 });
   controller.start();
-  controller.update(snapshot({ clientVersion: "1.9.0.7777" }));
+  controller.update(snapshot({ clientVersion: "future" }));
 
   assert.equal(controller.getState().name, "SEARCHING");
   assert.notEqual(controller.getState().reason, "unsupported-client-version");
@@ -235,7 +235,7 @@ test("low HP disengages and waits for full repair", () => {
   assert.equal(controller.getState().name, "SEARCHING");
 });
 
-test("disconnect, stale snapshot, death, and unknown version fail closed", () => {
+test("disconnect, stale snapshot, and death fail closed", () => {
   const badSnapshots = [
     snapshot({ connectionState: "disconnected", timestamp: 10000 }),
     snapshot({ timestamp: 1 }),
@@ -250,8 +250,7 @@ test("disconnect, stale snapshot, death, and unknown version fail closed", () =>
         moving: false,
         inCombat: false
       }
-    }),
-    snapshot({ clientVersion: "other", timestamp: 10000 })
+    })
   ];
 
   for (const badSnapshot of badSnapshots) {

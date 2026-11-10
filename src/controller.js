@@ -9,8 +9,6 @@
 })(typeof window === "object" ? window : null, function createApi(planner) {
   "use strict";
 
-  const EXPECTED_CLIENT_VERSION = "1.9.0.052";
-  const CLIENT_VERSION_PATTERN = /^\d{1,6}(?:\.\d{1,6}){3}$/;
   const TARGET_CONFIRMATION_TIMEOUT_MS = 1000;
   const MAX_TARGET_SELECTION_ATTEMPTS = 3;
   const {
@@ -199,10 +197,6 @@
     }
 
     function handleFailClosed(snapshot) {
-      if (!CLIENT_VERSION_PATTERN.test(snapshot.clientVersion)) {
-        fault("unsupported-client-version");
-        return true;
-      }
       if (snapshot.connectionState !== "connected") {
         fault("connection-not-ready");
         return true;
@@ -390,5 +384,5 @@
     return { drainActions, getState, start, stop, update };
   }
 
-  return { createController, EXPECTED_CLIENT_VERSION };
+  return { createController };
 });

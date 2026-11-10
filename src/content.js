@@ -103,7 +103,7 @@
     let designSettings = api.normalizeDesignSettings(stored.designSettings || {}).value;
     let loadingScreenImage = api.normalizeLoadingImage(stored.loadingScreenImage).value;
     let ckdaSaving = false;
-    // Source compatibility is a page-lifetime gate, independent of transient UI failures.
+    // An unavailable adapter stays closed until discovery explicitly reports ready.
     let ckdaSourceUnsupported = false;
     let ckdaSnapshot = null;
     let lastCkdaSnapshotAt = null;
@@ -336,6 +336,9 @@
       if (value.patchStatus === "unsupported" ||
           (value.patchStatus === "patched" && !api.isSupportedDiagnostic(value))) {
         ckdaAction(markCkdaUnsupported);
+      } else if (value.patchStatus === "patched" && value.reason === "capabilities-ready") {
+        ckdaSourceUnsupported = false;
+        if (ckdaStatus.state === "unsupported-client") ckdaStatus = {state: "waiting-for-game"};
       }
       logger.add("adapter", {
         patchStatus: value.patchStatus,

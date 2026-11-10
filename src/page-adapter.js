@@ -16,15 +16,16 @@
         const options = args[1];
         const isJavaScript =
           Array.isArray(parts) &&
-          parts.length === 1 &&
-          typeof parts[0] === "string" &&
+          parts.length > 0 &&
+          parts.every(part => typeof part === "string") &&
           options &&
-          options.type === "application/javascript";
+          /^(?:application|text)\/(?:java|ecma)script(?:\s*;|$)/i.test(options.type || "");
 
         if (!isJavaScript) return Reflect.construct(target, args, newTarget);
 
-        const result = patcher(parts[0]);
-        onStatus(result, parts[0]);
+        const source = parts.join("");
+        const result = patcher(source);
+        onStatus(result, source);
         const nextParts = result.status === "patched" ? [result.source] : parts;
         return Reflect.construct(target, [nextParts, options], newTarget);
       }
@@ -379,12 +380,6 @@
           const user = roots && roots.user;
           const actionBar = roots && roots.ui && roots.ui.ACTION_BAR;
           const world = roots && roots.world;
-          const clientVersion = String(roots && roots.version || "")
-            .replace(/^n/, "");
-          if (!sourcePatch.isSupportedClientVersion(clientVersion)) {
-            publishResult(payload, false, "unsupported-client-version");
-            return;
-          }
           if (!connectionReady()) {
             publishResult(payload, false, "connection-not-ready");
             return;
@@ -529,22 +524,33 @@
       NativeBlob,
       sourcePatch.patchGameSource,
       (status, originalSource) => {
+        if (patchStatus.status === "patched" && status.status !== "patched") return;
         patchStatus = status;
         capturedSource = originalSource;
       }
     );
 
     const startedAt = Date.now();
-    let sent = false;
+    let installed = false;
+    let stopped = false;
+    let timer = null;
+    let lastDiagnostic = null;
+    root.addEventListener("pagehide", () => {
+      stopped = true;
+      if (timer !== null) root.clearTimeout(timer);
+    }, { once: true });
     function sendDiagnostic() {
-      if (sent) return;
+      if (stopped || installed) return;
       const roots = root.__SA_BOT_ROOTS__;
       const timedOut = Date.now() - startedAt >= 30000;
       if (!roots && !timedOut) {
-        root.setTimeout(sendDiagnostic, 100);
+        timer = root.setTimeout(sendDiagnostic, 100);
         return;
       }
-      sent = true;
+      if (!roots) timer = root.setTimeout(sendDiagnostic, 500);
+      const diagnosticKey = roots ? "ready" : `${patchStatus.status}:${patchStatus.reason}`;
+      if (diagnosticKey === lastDiagnostic) return;
+      lastDiagnostic = diagnosticKey;
       const summaries = {};
       if (roots) {
         for (const name of ["input", "ui", "user", "camera", "world", "renderer"]) {
@@ -556,13 +562,14 @@
         }
         installActionExecutor(root, roots);
         startSnapshotPublisher(root, roots);
+        installed = true;
       }
       publishDiagnostic(
         root,
         {
           clientVersion: roots ? roots.version : patchStatus.version,
-          patchStatus: roots ? "patched" : patchStatus.status,
-          reason: roots ? "recognized-client" : patchStatus.reason || "timeout",
+          patchStatus: roots ? "patched" : patchStatus.status === "patched" ? "waiting" : patchStatus.status,
+          reason: roots ? "capabilities-ready" : patchStatus.status === "patched" ? "waiting-for-game-objects" : patchStatus.reason || "timeout",
           pathname: root.location ? root.location.pathname : "",
           roots: summaries
         },
