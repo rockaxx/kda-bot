@@ -27,40 +27,35 @@ function harness() {
   return { calls, nativeFetch, originalResponse, windowRef };
 }
 
-function configure(value, shipDesign = "bastion", payload = models()) {
+function configure(value, payload = models()) {
   value.windowRef.emit("message", { source: value.windowRef, data: {
-    channel: "sa-design-bootstrap-v1", shipDesign, models: payload
+    channel: "sa-design-bootstrap-v1", models: payload
   } });
 }
 
-test("both external and base Models requests use packaged substituted data", async () => {
+test("both model requests preserve catalog IDs and only served models become selectable", async () => {
   const value = harness();
-  installModelInterceptor(value.windowRef, { configWaitMs: 0 });
+  const interceptor = installModelInterceptor(value.windowRef, { configWaitMs: 0 });
   configure(value);
+  assert.equal(interceptor.hasModel(31), false);
   for (const url of [EXTERNAL_URL, BASE_URL]) {
     const data = await (await value.windowRef.fetch(url)).json();
-    assert.deepEqual(data.ships[31], data.ships[2]);
+    assert.deepEqual(data, models());
   }
+  assert.equal(interceptor.hasModel(31), true);
+  assert.equal(interceptor.hasModel(999), false);
+  value.windowRef.Models = { ships: { 219: { path: "ships/sentinelRegalia" } } };
+  assert.equal(interceptor.hasModel(219), true);
+  assert.equal(interceptor.hasModel(31), false);
   assert.deepEqual(value.calls, [], "native model URLs must not be loaded");
   assert.notEqual(value.windowRef.fetch, value.nativeFetch, "narrow hook stays for second model request");
-});
-
-test("default design returns unchanged packaged data for both model requests", async () => {
-  const value = harness();
-  installModelInterceptor(value.windowRef, { configWaitMs: 0 });
-  configure(value, "default");
-  for (const url of [EXTERNAL_URL, BASE_URL]) {
-    const data = await (await value.windowRef.fetch(url)).json();
-    assert.equal(data.ships[31].path, "ships/goliath-surgeon");
-  }
-  assert.deepEqual(value.calls, []);
 });
 
 test("non-model and invalid bootstrap data fail open to native fetch", async () => {
   const value = harness();
   installModelInterceptor(value.windowRef, { configWaitMs: 0 });
   assert.equal(await value.windowRef.fetch("https://unsmod.eu/spacemap/data/Other.json"), value.originalResponse);
-  configure(value, "bastion", { ships: {} });
+  configure(value, { ships: {} });
   assert.equal(await value.windowRef.fetch(EXTERNAL_URL), value.originalResponse);
   assert.deepEqual(value.calls, ["https://unsmod.eu/spacemap/data/Other.json", EXTERNAL_URL]);
 });

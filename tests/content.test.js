@@ -18,7 +18,7 @@ function eventTarget() {
   };
 }
 
-function setup(stored = {}, deferred = false, failBridge = false, storageSet = () => Promise.resolve()) {
+function setup(stored = {}, deferred = false, failBridge = false, storageSet = () => Promise.resolve(), designCatalogReady) {
   const window = eventTarget();
   const timers = new Map();
   let nextTimer = 0;
@@ -42,6 +42,7 @@ function setup(stored = {}, deferred = false, failBridge = false, storageSet = (
     receiveActionResult() {}, destroy() { calls.destroyed.push("runtime"); }
   };
   window.__SA_BOT_ISOLATED_V1__ = {
+    designCatalogReady,
     ...require("../src/settings.js"), ...require("../src/ckda-settings.js"),
     ...require("../src/design-settings.js"),
     ...require("../src/loading-image-settings.js"),
@@ -248,7 +249,7 @@ test("content loads independent C-KDA defaults and initializes MAIN settings", (
   assert.deepEqual(Array.from(app.calls.keys), ["settings", "ckdaSettings", "designSettings", "loadingScreenImage"]);
   assert.equal(app.model().ckdaSettings.empCooldownMs, 28000);
   assert.equal(app.model().ckdaSettings.premiumOverride, false);
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["renew-lease", "configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-rings", "set-design-ship", "set-design-title", "refresh"]);
   assert.equal(app.calls.commands[2].payload.fps, 60);
 });
 
@@ -280,7 +281,7 @@ test("Design Mode persists normalized rank and applies it without BOT lifecycle"
   assert.equal(app.calls.commands.find(value => value.type === "set-design-rank").payload.rankId, 4);
   assert.equal(await app.options().onSaveDesign({ rankId: 19, extra: "discard" }), true);
   assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), {
-    designSettings: { rankId: 19, shipDesign: "default" }
+    designSettings: { rankId: 19, ringLevel: 0, shipDesign: "default", titleText: "", titleColor: "#ffd700" }
   });
   assert.equal(app.calls.commands.filter(value => value.type === "set-design-rank").at(-1).payload.rankId, 19);
   assert.equal(app.calls.starts + app.calls.stops, 0);
@@ -288,14 +289,22 @@ test("Design Mode persists normalized rank and applies it without BOT lifecycle"
   assert.equal(app.model().designSettings.rankId, 19);
 });
 
-test("Design Mode persists Bastion ship choice without BOT lifecycle", async () => {
-  const app = setup();
-  assert.equal(await app.options().onSaveDesign({ rankId: 0, shipDesign: "bastion" }), true);
+test("Design Mode loads the catalog, saves ship and title, and sends both overrides", async () => {
+  const app = setup({}, false, false, undefined, Promise.resolve(require("../assets/Models.steam.json").ships));
+  await Promise.resolve();
+  assert.equal(app.options().shipCatalog.length, 249);
+  assert.equal(await app.options().onSaveDesign({
+    rankId: 0, ringLevel: 7, shipDesign: "model:219", titleText: " Star Pilot ", titleColor: "#00AAFF"
+  }), true);
   assert.deepEqual(JSON.parse(JSON.stringify(app.calls.saves.at(-1))), {
-    designSettings: { rankId: 0, shipDesign: "bastion" }
+    designSettings: { rankId: 0, ringLevel: 7, shipDesign: "model:219", titleText: "Star Pilot", titleColor: "#00aaff" }
   });
-  assert.equal(app.model().designSettings.shipDesign, "bastion");
-  assert.equal(app.calls.commands.filter(value => value.type === "set-design-ship").at(-1).payload.shipDesign, "bastion");
+  assert.equal(app.model().designSettings.shipDesign, "model:219");
+  assert.equal(app.calls.commands.filter(value => value.type === "set-design-rings").at(-1).payload.ringLevel, 7);
+  assert.equal(await app.options().onSaveDesign({ ringLevel: 8 }), false);
+  assert.equal(app.calls.commands.filter(value => value.type === "set-design-ship").at(-1).payload.shipDesign, "model:219");
+  assert.equal(app.calls.commands.filter(value => value.type === "set-design-title").at(-1).payload.titleText, "Star Pilot");
+  assert.equal(await app.options().onSaveDesign({ titleText: "line\nbreak" }), false);
   assert.equal(app.calls.starts + app.calls.stops, 0);
 });
 
@@ -414,7 +423,7 @@ test("late MAIN readiness resends persisted C-KDA configuration without BOT life
   assert.equal(app.model().ckdaSettings.sizePx, 8);
   app.calls.commands.length = 0;
   app.result({ type: "ready" });
-  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-ship", "refresh"]);
+  assert.deepEqual(app.calls.commands.map(value => value.type), ["configure-effects", "configure-refresh", "set-premium", "set-design-rank", "set-design-rings", "set-design-ship", "set-design-title", "refresh"]);
   assert.equal(app.calls.commands[0].payload.empCooldownMs, 15000);
   assert.equal(app.calls.commands[1].payload.fps, 60);
   assert.equal(app.calls.commands[2].payload.enabled, true);

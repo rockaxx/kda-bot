@@ -167,7 +167,7 @@ test("C-KDA command schema strictly validates Design Mode rank commands", () => 
 
 test("C-KDA command schema validates live ship design commands", () => {
   const envelope = { channel: CKDA_CHANNEL, direction: "command",
-    payload: { requestId: 1, type: "set-design-ship", shipDesign: "regalia" } };
+    payload: { requestId: 1, type: "set-design-ship", shipDesign: "model:218" } };
   assert.equal(validateCkdaEnvelope(envelope).ok, true);
   for (const shipDesign of ["unknown", "", 218]) {
     assert.equal(validateCkdaEnvelope({ ...envelope, payload: { ...envelope.payload, shipDesign } }).ok, false);

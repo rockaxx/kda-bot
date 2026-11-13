@@ -12,8 +12,12 @@ legacy NPC bot implementation remains disabled and is not exposed in the UI.
 - Client-local Premium presentation override. It does not grant or change any
   server entitlement and is restored on disable, navigation, or cleanup.
 - Visual rank selection from default through rank 20.
-- Live appearance override for the active ship using the bundled Goliath design
-  list; selecting the default restores the current game design.
+- Gate ring appearance above the local ship's rank. Choose Ring 1–6, Crown, or
+  Current game rings to restore the original appearance.
+- Live appearance override for the active ship with every model in the bundled
+  UNS catalog. Filter by ship family or browse the Other category.
+- Custom title and colour in the local ship nameplate. Clear the text to restore
+  the original game title.
 - Custom loading image from a local **GIF, PNG, JPG, or JPEG** file. Other file
   types are rejected. With no custom image, bundled `besto.gif` is the default.
 - `N` hides or shows the complete KDA panel.
@@ -24,12 +28,12 @@ loading image. Images remain in the extension's local Chrome storage.
 
 ## Install a GitHub release
 
-1. Download `KDA-v0.4.2.zip` from the latest GitHub release.
+1. Download `KDA-v0.5.0.zip` from the latest GitHub release.
 2. Extract the ZIP. Do not select the ZIP itself in Chrome.
 3. Open `chrome://extensions`.
 4. Enable **Developer mode**.
 5. Click **Load unpacked**.
-6. Select the extracted `KDA-v0.4.2` folder containing `manifest.json`.
+6. Select the extracted `KDA-v0.5.0` folder containing `manifest.json`.
 7. Open or fully reload
    `https://steam.space-aces.com/gameNew?factionId=1&lang=en`.
 
@@ -40,8 +44,9 @@ does not auto-update it from GitHub.
 ## Use
 
 - **C-KDA:** configure markers, then click **SAVE C-KDA**.
-- **Design:** choose rank and active ship appearance, then click **SAVE DESIGN**.
-  Ship and rank changes apply live when the game objects are ready.
+- **Design:** choose a ship category and model, set a rank or gate ring appearance, or enter a custom title
+  of up to 40 characters and pick its colour. Click **SAVE DESIGN** to apply.
+  **Current ship design** restores the original appearance.
 - **Loading image:** choose a supported file and click **UPLOAD LOADING**, then
   reload the game. Click **DEFAULT BESTO** and reload to restore the bundled GIF.
 - Press `N` to hide or show the panel.

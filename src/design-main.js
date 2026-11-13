@@ -9,14 +9,6 @@
     return Number.isInteger(value) && value >= 0 && value <= 20;
   }
 
-  const SHIP_MODEL_IDS = Object.freeze({
-    default: null, enforcer: 1, bastion: 2, goliath: 14, veteran: 17,
-    exalted: 18, goal: 19, kick: 20, referee: 21, surgeon: 31,
-    vanquisher: 78, sovereign: 79, peacemaker: 80, saturn: 81,
-    bronze: 91, silver: 92, gold: 93, crimson: 95, frost: 128,
-    ignite: 133, "plus-carbonite": 181, iron: 216, regalia: 218
-  });
-
   function createRankOverride({ windowRef, getRoots } = {}) {
     if (!windowRef || typeof getRoots !== "function") {
       return { setRank() { return false; }, cleanup() { return false; } };
@@ -102,7 +94,7 @@
     return { setRank, cleanup };
   }
 
-  function createShipOverride({ windowRef, getRoots } = {}) {
+  function createShipOverride({ windowRef, getRoots, hasModel = () => false } = {}) {
     if (!windowRef || typeof getRoots !== "function") {
       return { setDesign() { return false; }, cleanup() { return false; } };
     }
@@ -112,7 +104,7 @@
     const cancelFrame = typeof windowRef.cancelAnimationFrame === "function"
       ? (id) => windowRef.cancelAnimationFrame(id)
       : (id) => windowRef.clearTimeout(id);
-    let selectedDesign = "default";
+    let selectedModelId = null;
     let activeShip = null;
     let nativeModelId = null;
     let frameId = null;
@@ -139,10 +131,10 @@
     }
 
     function apply(captureNativeUpdate = true) {
-      if (stopped || selectedDesign === "default") return;
+      if (stopped || selectedModelId === null || !hasModel(selectedModelId)) return;
       const ship = currentShip();
       if (!ship) return;
-      const targetModelId = SHIP_MODEL_IDS[selectedDesign];
+      const targetModelId = selectedModelId;
       if (ship !== activeShip) {
         restoreShip();
         activeShip = ship;
@@ -161,28 +153,27 @@
     }
 
     function schedule() {
-      if (!stopped && selectedDesign !== "default" && frameId === null) {
+      if (!stopped && selectedModelId !== null && frameId === null) {
         frameId = requestFrame(monitor);
       }
     }
 
     function monitor() {
       frameId = null;
-      if (stopped || selectedDesign === "default") return;
+      if (stopped || selectedModelId === null) return;
       apply();
       schedule();
     }
 
     function setDesign(value) {
-      if (stopped || !Object.hasOwn(SHIP_MODEL_IDS, value)) return false;
+      if (stopped || (value !== "default" && (typeof value !== "string" || !/^model:[1-9]\d{0,8}$/.test(value)))) return false;
       if (frameId !== null) cancelFrame(frameId);
       frameId = null;
+      selectedModelId = value === "default" ? null : Number(value.slice(6));
       if (value === "default") {
-        selectedDesign = value;
         restoreShip();
         return true;
       }
-      selectedDesign = value;
       apply(false);
       schedule();
       return true;
@@ -200,5 +191,117 @@
     return { setDesign, cleanup };
   }
 
-  return { SHIP_MODEL_IDS, createRankOverride, createShipOverride };
+  function createRingOverride(getRoots) {
+    let ringLevel = 0;
+    let active = null;
+
+    function restore() {
+      const previous = active;
+      active = null;
+      if (!previous?.applied || previous.ship.rings !== previous.applied ||
+          previous.ship.ringInfo?.wrapper?.destroyed) return;
+      previous.ship.setRings(previous.original);
+      previous.ship.positionBottomBarElements();
+    }
+
+    function refresh() {
+      if (ringLevel === 0) return;
+      const ship = getRoots()?.user?.ship;
+      if (active && active.ship !== ship) restore();
+      const ringInfo = ship?.ringInfo;
+      if (!Array.isArray(ship?.rings) || typeof ship.setRings !== "function" ||
+          typeof ship.positionBottomBarElements !== "function" ||
+          typeof ringInfo?.reinit !== "function" || ringInfo.wrapper?.destroyed) return;
+
+      if (!active || ship.rings !== active.applied) {
+        active = { ship, original: JSON.stringify(ship.rings) };
+      } else if (active.level === ringLevel && active.ringInfo === ringInfo) {
+        return;
+      }
+      // The native renderer uses six ring slots and draws a crown when all seven are filled.
+      const rings = Array.from({ length: 7 }, (_, slot) => slot < ringLevel ? 1 : 0);
+      const before = ship.rings;
+      try {
+        ship.setRings(JSON.stringify(rings));
+      } catch (error) {
+        ship.rings = before;
+        throw error;
+      }
+      active.applied = ship.rings;
+      ship.positionBottomBarElements();
+      active.level = ringLevel;
+      active.ringInfo = ringInfo;
+    }
+
+    function setRings(level) {
+      ringLevel = level;
+      if (level === 0) restore();
+      else refresh();
+    }
+
+    return { setRings, refresh, cleanup: () => setRings(0) };
+  }
+
+  function createTitleOverride(getRoots) {
+    let selectedText = "";
+    let selectedColor = "";
+    let nativeValues = null;
+
+    function restore() {
+      if (!nativeValues) return;
+      const { ship, tag, fields } = nativeValues;
+      nativeValues = null;
+      for (const field of fields) {
+        // Preserve updates already made by the game since our last refresh.
+        if (Object.is(field.target[field.key], field.applied)) field.target[field.key] = field.original;
+      }
+      if (ship.titleTagObj === tag) ship.positionBottomBarElements?.();
+    }
+
+    function refresh() {
+      if (!selectedText) return;
+      const ship = getRoots()?.user?.ship;
+      const tag = ship?.titleTagObj;
+      if (nativeValues && (ship !== nativeValues.ship || tag !== nativeValues.tag ||
+          tag.style !== nativeValues.style)) restore();
+      if (typeof tag?.text !== "string" || !tag.style ||
+          typeof ship.currentTitleColor !== "string" || typeof ship.positionBottomBarElements !== "function") return;
+      if (!nativeValues) {
+        const properties = [[tag, "text"], [tag.style, "fill"], [tag, "safilter"], [ship, "currentTitleColor"]];
+        nativeValues = {
+          ship, tag, style: tag.style,
+          fields: properties.map(([target, key]) => ({ target, key, original: target[key], applied: target[key] }))
+        };
+      }
+      // PIXI takes a numeric fill. The canvas renderer reads the ship's CSS colour.
+      const values = [selectedText, Number.parseInt(selectedColor.slice(1), 16), null, selectedColor];
+      let changed = false;
+      nativeValues.fields.forEach((field, index) => {
+        const current = field.target[field.key];
+        if (!Object.is(current, field.applied)) field.original = current;
+        if (!Object.is(current, values[index])) {
+          field.target[field.key] = values[index];
+          changed = true;
+        }
+        field.applied = field.target[field.key];
+      });
+      if (changed) ship.positionBottomBarElements();
+    }
+
+    function setTitle(text, color) {
+      selectedText = text.trim();
+      selectedColor = color;
+      if (selectedText) refresh();
+      else restore();
+    }
+
+    function cleanup() {
+      selectedText = "";
+      restore();
+    }
+
+    return { setTitle, refresh, cleanup };
+  }
+
+  return { createRankOverride, createRingOverride, createShipOverride, createTitleOverride };
 });

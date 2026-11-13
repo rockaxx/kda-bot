@@ -38,23 +38,11 @@
   });
   const DESIGN_FIELD_DEFINITIONS = Object.freeze([
     ["rankId", "Rank design", "number"],
-    ["shipDesign", "Ship design", "select"]
+    ["ringLevel", "Gate rings", "number"],
+    ["shipDesign", "Ship design", "select"],
+    ["titleText", "Custom title", "text"],
+    ["titleColor", "Title colour", "color"]
   ]);
-  const SHIP_DESIGN_OPTIONS = Object.freeze([
-    ["default", "Current ship design"], ["enforcer", "Goliath Enforcer"],
-    ["bastion", "Goliath Bastion"], ["goliath", "Goliath"],
-    ["veteran", "Goliath Veteran"], ["exalted", "Goliath Exalted"],
-    ["goal", "Goliath Goal"], ["kick", "Goliath Kick"],
-    ["referee", "Goliath Referee"], ["surgeon", "Goliath Surgeon"],
-    ["vanquisher", "Goliath Vanquisher"], ["sovereign", "Goliath Sovereign"],
-    ["peacemaker", "Goliath Peacemaker"], ["saturn", "Goliath Saturn"],
-    ["bronze", "Goliath Bronze"], ["silver", "Goliath Silver"],
-    ["gold", "Goliath Gold"], ["crimson", "Goliath Crimson"],
-    ["frost", "Goliath Frost"], ["ignite", "Goliath Ignite"],
-    ["plus-carbonite", "Goliath Plus Carbonite"], ["iron", "Goliath Iron"],
-    ["regalia", "Goliath Regalia"]
-  ].map(Object.freeze));
-
   function canStartBot({ settingsValid, adapterSupported, hasSnapshot }) {
     return Boolean(settingsValid && adapterSupported && hasSnapshot);
   }
@@ -233,6 +221,7 @@
     onSave,
     onSaveCkda = () => false,
     onPreviewCkda = () => {},
+    shipCatalog = [],
     onSaveDesign = () => false,
     onSaveLoadingImage = () => false,
     onResetLoadingImage = () => false,
@@ -439,17 +428,58 @@
       rankSelect.appendChild(option);
     }
     designInputs.rankId = rankSelect;
+    const ringSelect = documentRef.createElement("select");
+    ringSelect.id = "sa-design-ringLevel";
+    ringSelect.dataset.designSetting = "ringLevel";
+    designInputs.ringLevel = ringSelect;
     const shipDesignSelect = documentRef.createElement("select");
     shipDesignSelect.id = "sa-design-shipDesign";
     shipDesignSelect.dataset.designSetting = "shipDesign";
-    for (const [value, text] of SHIP_DESIGN_OPTIONS) {
+    const shipCategorySelect = documentRef.createElement("select");
+    shipCategorySelect.id = "sa-design-shipCategory";
+    shipCategorySelect.dataset.designSetting = "shipCategory";
+    function addOption(select, value, label) {
       const option = documentRef.createElement("option");
       option.value = value;
-      option.textContent = text;
-      shipDesignSelect.appendChild(option);
+      option.textContent = label;
+      select.appendChild(option);
+      return option;
     }
+    addOption(ringSelect, "0", "Current game rings");
+    for (let level = 1; level <= 6; level += 1) {
+      addOption(ringSelect, String(level), "Ring " + level);
+    }
+    addOption(ringSelect, "7", "Crown");
+    addOption(shipDesignSelect, "default", "Current ship design");
+    addOption(shipCategorySelect, "", "All designs");
+    const categories = [...new Set(shipCatalog.map(entry => entry.category))].sort();
+    for (const category of categories.filter(value => value !== "Other")) {
+      addOption(shipCategorySelect, category, category + " designs");
+    }
+    if (categories.includes("Other")) addOption(shipCategorySelect, "Other", "Other");
+    shipCategorySelect.value = "";
+    const shipOptions = shipCatalog.map(entry => ({
+      ...entry, option: addOption(shipDesignSelect, entry.value, entry.label)
+    }));
     designInputs.shipDesign = shipDesignSelect;
+    const titleTextInput = documentRef.createElement("input");
+    titleTextInput.type = "text";
+    titleTextInput.maxLength = 40;
+    titleTextInput.placeholder = "Blank uses game title";
+    const titleColorInput = documentRef.createElement("input");
+    titleColorInput.type = "color";
+    designInputs.titleText = titleTextInput;
+    designInputs.titleColor = titleColorInput;
     const designForm = createDesignFormState(designInputs);
+    function filterShipOptions() {
+      const category = shipCategorySelect.value;
+      for (const entry of shipOptions) {
+        const hidden = Boolean(category && entry.category !== category && entry.value !== shipDesignSelect.value);
+        if (entry.option.hidden !== hidden) entry.option.hidden = entry.option.disabled = hidden;
+      }
+    }
+    shipCategorySelect.addEventListener("change", filterShipOptions);
+    shipDesignSelect.addEventListener("change", filterShipOptions);
 
     const makeButton = (text, className, parent) => {
       const button = documentRef.createElement("button");
@@ -579,16 +609,30 @@
     designView.dataset.view = "design";
     const designTitle = documentRef.createElement("div");
     designTitle.className = "section-title";
-    designTitle.textContent = "Rank appearance";
+    designTitle.textContent = "Ship appearance";
     const designFields = documentRef.createElement("div");
     designFields.className = "settings-grid";
     const rankField = documentRef.createElement("div");
-    rankField.className = "field wide";
+    rankField.className = "field";
     const rankLabel = documentRef.createElement("label");
     rankLabel.textContent = "Hero rank";
     rankLabel.htmlFor = rankSelect.id;
     rankField.append(rankLabel, rankSelect);
     designFields.appendChild(rankField);
+    const ringField = documentRef.createElement("div");
+    ringField.className = "field";
+    const ringLabel = documentRef.createElement("label");
+    ringLabel.htmlFor = ringSelect.id;
+    ringLabel.textContent = "Gate rings";
+    ringField.append(ringLabel, ringSelect);
+    designFields.appendChild(ringField);
+    const categoryField = documentRef.createElement("div");
+    categoryField.className = "field wide";
+    const categoryLabel = documentRef.createElement("label");
+    categoryLabel.htmlFor = shipCategorySelect.id;
+    categoryLabel.textContent = "Ship category";
+    categoryField.append(categoryLabel, shipCategorySelect);
+    designFields.appendChild(categoryField);
     const shipField = documentRef.createElement("div");
     shipField.className = "field wide";
     const shipLabel = documentRef.createElement("label");
@@ -596,6 +640,18 @@
     shipLabel.htmlFor = shipDesignSelect.id;
     shipField.append(shipLabel, shipDesignSelect);
     designFields.appendChild(shipField);
+    for (const [key, labelText] of DESIGN_FIELD_DEFINITIONS.slice(3)) {
+      const input = designInputs[key];
+      input.id = "sa-design-" + key;
+      input.dataset.designSetting = key;
+      const field = documentRef.createElement("div");
+      field.className = "field";
+      const label = documentRef.createElement("label");
+      label.htmlFor = input.id;
+      label.textContent = labelText;
+      field.append(label, input);
+      designFields.appendChild(field);
+    }
     const loadingField = documentRef.createElement("div");
     loadingField.className = "field wide";
     const loadingLabel = documentRef.createElement("label");
@@ -610,7 +666,7 @@
     designFields.appendChild(loadingField);
     const designNote = documentRef.createElement("div");
     designNote.className = "ckda-visual";
-    designNote.textContent = "Ship changes apply live. Custom loading image applies after reload; no upload uses Besto GIF.";
+    designNote.textContent = "Appearance changes apply locally on save. Loading image applies after reload.";
     const loadingImageStatus = documentRef.createElement("div");
     loadingImageStatus.className = "mode-reason";
     loadingImageStatus.textContent = "Besto GIF (default)";
@@ -656,6 +712,7 @@
     }
 
     function handleToggle(event) {
+      if (shadow.activeElement === titleTextInput) return;
       if (!shouldToggleOverlay(event)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -663,6 +720,9 @@
       syncPanelState();
     }
     documentRef.addEventListener("keydown", handleToggle, true);
+    for (const type of ["keydown", "keyup", "keypress"]) {
+      titleTextInput.addEventListener(type, event => event.stopPropagation());
+    }
     syncPanelState();
 
     startButton.addEventListener("click", () => {
@@ -684,7 +744,9 @@
       lastModel = { ...model };
       settingsForm.sync(model.settings);
       ckdaForm.sync(model.ckdaSettings);
+      const previousShip = shipDesignSelect.value;
       designForm.sync(model.designSettings);
+      if (shipDesignSelect.value !== previousShip) filterShipOptions();
       loadingImageStatus.textContent = model.loadingImageName || "Besto GIF (default)";
       startButton.disabled = !canStartBot(model) || Boolean(model.active);
       stopButton.disabled = !model.active;

@@ -907,19 +907,79 @@ test("MAIN applies Design Mode rank command and cleanup restores the native rank
   assert.deepEqual(rankCalls, [12, 5]);
 });
 
-test("MAIN applies selected Goliath to the active ship without reload", () => {
+test("MAIN applies a catalog model and title to the active ship, then restores both", () => {
   const roots = installerRoots();
   roots.version = "n1.9.0.7777";
   roots.user.ship.modelId = 44;
+  roots.user.ship.currentTitleColor = "#ffaa00";
+  roots.user.ship.titleTagObj = { text: "", style: { fill: 0xffaa00 } };
+  roots.user.ship.positionBottomBarElements = () => {};
   const calls = [];
   roots.user.ship.setShipSprite = function setShipSprite() { calls.push(this.modelId); };
   const windowRef = installerWindow(roots);
+  windowRef.__SA_BOT_MAIN_V1__ = { hasDesignModel: id => id === 219 };
   const installation = installCkda(windowRef);
-  windowRef.command({ type: "set-design-ship", shipDesign: "regalia" });
-  assert.equal(roots.user.ship.modelId, 218);
-  assert.deepEqual(calls, [218]);
+  windowRef.command({ type: "set-design-ship", shipDesign: "model:999" });
+  assert.equal(roots.user.ship.modelId, 44);
+  windowRef.command({ type: "set-design-ship", shipDesign: "model:219" });
+  assert.equal(roots.user.ship.modelId, 219);
+  assert.deepEqual(calls, [219]);
+  windowRef.command({ type: "set-design-title", titleText: "Pilot", titleColor: "#00aaff" });
+  assert.equal(roots.user.ship.titleTagObj.text, "Pilot");
+  assert.equal(roots.user.ship.titleTagObj.style.fill, 0x00aaff);
+  assert.equal(roots.user.ship.currentTitleColor, "#00aaff");
+  windowRef.command({ type: "set-design-title", titleText: "bad\nline", titleColor: "#ff0000" });
+  assert.equal(roots.user.ship.titleTagObj.text, "Pilot");
+  roots.user.ship.titleTagObj.text = "New game title";
+  roots.user.ship.currentTitleColor = "#ffee00";
+  windowRef.command({ type: "refresh" });
+  assert.equal(roots.user.ship.titleTagObj.text, "Pilot");
+  windowRef.command({ type: "set-design-title", titleText: "", titleColor: "#00aaff" });
+  assert.equal(roots.user.ship.titleTagObj.text, "New game title");
+  assert.equal(roots.user.ship.currentTitleColor, "#ffee00");
+  windowRef.command({ type: "set-design-title", titleText: "Pilot", titleColor: "#00aaff" });
   installation.cleanup();
   assert.equal(roots.user.ship.modelId, 44);
+  assert.equal(roots.user.ship.titleTagObj.text, "New game title");
+  assert.equal(roots.user.ship.currentTitleColor, "#ffee00");
+});
+
+test("MAIN redraws native gate rings and crown, then restores the latest game rings", () => {
+  function ringShip(rings) {
+    return {
+      rings, updates: 0, layouts: 0,
+      ringInfo: { reinit() {} },
+      setRings(serialized) {
+        this.rings = JSON.parse(serialized);
+        this.ringInfo.reinit();
+        this.updates++;
+      },
+      positionBottomBarElements() { this.layouts++; }
+    };
+  }
+  const roots = installerRoots();
+  const first = Object.assign(roots.user.ship, ringShip([0, 2, 0, 0, 0, 0, 0]));
+  const windowRef = installerWindow(roots);
+  installCkda(windowRef);
+  windowRef.command({ type: "set-design-rings", ringLevel: 6 });
+  assert.deepEqual(first.rings, [1, 1, 1, 1, 1, 1, 0]);
+  windowRef.command({ type: "set-design-rings", ringLevel: 7 });
+  assert.deepEqual(first.rings, [1, 1, 1, 1, 1, 1, 1]);
+  windowRef.command({ type: "set-design-rings", ringLevel: 8 });
+  windowRef.tick();
+  assert.equal(first.updates, 2);
+  const replacement = Object.assign({ ...first }, ringShip([0, 0, 4, 0, 0, 0, 0]));
+  roots.user.ship = replacement;
+  windowRef.tick();
+  assert.deepEqual(first.rings, [0, 2, 0, 0, 0, 0, 0]);
+  assert.equal(replacement.rings.filter(Boolean).length, 7);
+  replacement.setRings("[0,0,0,0,5,0,0]");
+  windowRef.tick();
+  windowRef.command({ type: "set-design-rings", ringLevel: 0 });
+  assert.deepEqual(replacement.rings, [0, 0, 0, 0, 5, 0, 0]);
+  windowRef.command({ type: "set-design-rings", ringLevel: 1 });
+  windowRef.emit("pagehide");
+  assert.deepEqual(replacement.rings, [0, 0, 0, 0, 5, 0, 0]);
 });
 
 test("MAIN pagehide restores hooks and Premium, stops publisher, and removes command listener once", () => {

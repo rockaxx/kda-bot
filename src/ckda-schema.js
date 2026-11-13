@@ -17,17 +17,13 @@
   const DIRECTIONS = new Set(["snapshot", "command", "result", "lifecycle"]);
   const RELATIONS = new Set(["ally", "enemy"]);
   const PREMIUM_STATES = new Set(["inactive", "active", "unsupported"]);
-  const SHIP_DESIGNS = new Set([
-    "default", "enforcer", "bastion", "goliath", "veteran", "exalted",
-    "goal", "kick", "referee", "surgeon", "vanquisher", "sovereign",
-    "peacemaker", "saturn", "bronze", "silver", "gold", "crimson",
-    "frost", "ignite", "plus-carbonite", "iron", "regalia"
-  ]);
   const REFRESH_RATES = new Set([30, 60, 120, 240, 360]);
   const COMMAND_FIELDS = Object.freeze({
     "set-premium": ["enabled"],
     "set-design-rank": ["rankId"],
+    "set-design-rings": ["ringLevel"],
     "set-design-ship": ["shipDesign"],
+    "set-design-title": ["titleText", "titleColor"],
     "configure-effects": ["empCooldownMs", "ishCooldownMs"],
     "configure-refresh": ["fps"],
     clear: [], refresh: [], teardown: [], "renew-lease": []
@@ -179,9 +175,19 @@
               (!Number.isInteger(payload.rankId) || payload.rankId < 0 || payload.rankId > 20)) {
             errors.push("rankId is invalid");
           }
-          if (payload.type === "set-design-ship" && !SHIP_DESIGNS.has(payload.shipDesign)) {
+          if (payload.type === "set-design-rings" &&
+              (!Number.isInteger(payload.ringLevel) || payload.ringLevel < 0 || payload.ringLevel > 7)) {
+            errors.push("ringLevel is invalid");
+          }
+          if (payload.type === "set-design-ship" && payload.shipDesign !== "default" &&
+              (typeof payload.shipDesign !== "string" || !/^model:[1-9]\d{0,8}$/.test(payload.shipDesign))) {
             errors.push("shipDesign is invalid");
           }
+          if (payload.type === "set-design-title" && (
+            typeof payload.titleText !== "string" || payload.titleText.length > 40 ||
+            /[\p{Cc}\p{Zl}\p{Zp}]/u.test(payload.titleText) ||
+            typeof payload.titleColor !== "string" || !/^#[0-9a-f]{6}$/i.test(payload.titleColor)
+          )) errors.push("title appearance is invalid");
           if (payload.type === "configure-effects" && fields.some(key =>
             !Number.isFinite(payload[key]) || payload[key] < 1000 || payload[key] > 120000
           )) errors.push("effect duration is invalid");

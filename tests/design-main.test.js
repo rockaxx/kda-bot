@@ -84,11 +84,13 @@ test("ship override changes the active hero model immediately and restores it", 
   ship.modelId = 55;
   ship.spriteCalls = [];
   ship.setShipSprite = function setShipSprite() { this.spriteCalls.push(this.modelId); };
-  const controller = createShipOverride({ windowRef: value.windowRef, getRoots: () => value.roots });
-  assert.equal(controller.setDesign("bastion"), true);
+  const controller = createShipOverride({
+    windowRef: value.windowRef, getRoots: () => value.roots, hasModel: id => id === 2 || id === 31
+  });
+  assert.equal(controller.setDesign("model:2"), true);
   assert.equal(ship.modelId, 2);
   assert.deepEqual(ship.spriteCalls, [2]);
-  assert.equal(controller.setDesign("surgeon"), true);
+  assert.equal(controller.setDesign("model:31"), true);
   assert.equal(ship.modelId, 31);
   assert.deepEqual(ship.spriteCalls, [2, 31]);
   assert.equal(controller.setDesign("default"), true);
@@ -102,8 +104,10 @@ test("ship override follows hero replacement without reload", () => {
   const first = value.roots.user.ship;
   first.modelId = 70;
   first.setShipSprite = function setShipSprite() {};
-  const controller = createShipOverride({ windowRef: value.windowRef, getRoots: () => value.roots });
-  controller.setDesign("regalia");
+  const controller = createShipOverride({
+    windowRef: value.windowRef, getRoots: () => value.roots, hasModel: id => id === 218
+  });
+  controller.setDesign("model:218");
   const second = value.ship(1);
   second.modelId = 80;
   second.calls = [];

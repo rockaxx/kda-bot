@@ -105,30 +105,42 @@ test("Design Mode rank selector reads numeric rank IDs", () => {
     addEventListener(name, handler) { listeners[name] = handler; }
   };
   const shipInput = { value: "", addEventListener() {} };
-  const form = createDesignFormState({ rankId: input, shipDesign: shipInput });
-  form.sync({ rankId: 0, shipDesign: "bastion" });
+  const ringLevel = { value: "", addEventListener() {} };
+  const titleText = { value: "", addEventListener() {} };
+  const titleColor = { value: "", addEventListener() {} };
+  const form = createDesignFormState({ rankId: input, ringLevel, shipDesign: shipInput, titleText, titleColor });
+  const appearance = { ringLevel: 7, shipDesign: "model:2", titleText: "Pilot", titleColor: "#abcdef" };
+  form.sync({ rankId: 0, ...appearance });
   assert.equal(input.value, "0");
   input.value = "20";
   listeners.change();
   let submitted;
   form.submit((value) => { submitted = value; return true; });
-  assert.deepEqual(submitted, { rankId: 20, shipDesign: "bastion" });
+  assert.deepEqual(submitted, { rankId: 20, ...appearance });
 });
 
-test("Design Mode exposes active-ship default and Goliath design list", () => {
+test("Design Mode filters all models by category and exposes custom title inputs", () => {
   const originalObserver = global.MutationObserver;
   global.MutationObserver = class { observe() {} disconnect() {} };
   try {
     const { documentRef, elements } = createOverlayDocument();
-    const overlay = createOverlay({ documentRef });
+    const { createShipCatalog } = require("../src/design-settings.js");
+    const shipCatalog = createShipCatalog(require("../assets/Models.steam.json").ships);
+    const overlay = createOverlay({ documentRef, shipCatalog });
     const select = elements.find(element => element.dataset.designSetting === "shipDesign");
-    const options = select.children.map(option => [option.value, option.textContent]);
-    assert.deepEqual(options.slice(0, 3), [
-      ["default", "Current ship design"], ["enforcer", "Goliath Enforcer"], ["bastion", "Goliath Bastion"]
+    const category = elements.find(element => element.dataset.designSetting === "shipCategory");
+    const rings = elements.find(element => element.dataset.designSetting === "ringLevel");
+    assert.deepEqual(rings.children.map(option => option.textContent), [
+      "Current game rings", "Ring 1", "Ring 2", "Ring 3", "Ring 4", "Ring 5", "Ring 6", "Crown"
     ]);
-    assert.ok(options.some(([value]) => value === "surgeon"));
-    assert.ok(options.some(([value]) => value === "regalia"));
-    assert.ok(options.length >= 20);
+    assert.equal(select.children[0].value, "default");
+    assert.equal(select.children.length, shipCatalog.length + 1);
+    category.value = "Spectrum";
+    category.listeners.change();
+    assert.deepEqual(select.children.filter(option => !option.hidden).map(option => option.value),
+      ["default", ...shipCatalog.filter(entry => entry.category === "Spectrum").map(entry => entry.value)]);
+    assert.equal(elements.find(element => element.dataset.designSetting === "titleText").maxLength, 40);
+    assert.equal(elements.find(element => element.dataset.designSetting === "titleColor").type, "color");
     overlay.destroy();
   } finally {
     global.MutationObserver = originalObserver;

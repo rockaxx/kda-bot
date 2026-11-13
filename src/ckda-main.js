@@ -538,7 +538,9 @@
     let cooldowns = null;
     let premium = null;
     let rankOverride = null;
+    let ringOverride = null;
     let shipOverride = null;
+    let titleOverride = null;
     let hooks = null;
     let hookedWorld = null;
     let roots = null;
@@ -580,8 +582,12 @@
           publisher.clear();
         } else if (command.type === "set-design-rank") {
           rankOverride?.setRank(command.rankId);
+        } else if (command.type === "set-design-rings") {
+          ringOverride?.setRings(command.ringLevel);
         } else if (command.type === "set-design-ship") {
           shipOverride?.setDesign(command.shipDesign);
+        } else if (command.type === "set-design-title") {
+          titleOverride?.setTitle(command.titleText, command.titleColor);
         }
         publisher.refresh();
       } catch (_) {
@@ -601,8 +607,8 @@
       windowRef.removeEventListener("beforeunload", cleanup);
       for (const release of [
         () => publisher?.stop(), () => hooks?.cleanup(),
-        () => premium?.disable(), () => rankOverride?.cleanup(),
-        () => shipOverride?.cleanup(), () => cooldowns?.clearAll()
+        () => premium?.disable(), () => rankOverride?.cleanup(), () => ringOverride?.cleanup(),
+        () => shipOverride?.cleanup(), () => titleOverride?.cleanup(), () => cooldowns?.clearAll()
       ]) {
         try { release(); } catch (_) { /* Release the remaining independent resources. */ }
       }
@@ -624,15 +630,23 @@
           documentRef: windowRef.document,
           getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots
         });
+        ringOverride = dependency.createRingOverride(() => windowRef.__SA_BOT_ROOTS__ || roots);
         shipOverride = dependency.createShipOverride({
           windowRef,
-          getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots
+          getRoots: () => windowRef.__SA_BOT_ROOTS__ || roots,
+          hasModel: dependency.hasDesignModel || windowRef.__SA_BOT_MAIN_V1__?.hasDesignModel
         });
+        titleOverride = dependency.createTitleOverride(() => windowRef.__SA_BOT_ROOTS__ || roots);
         publisher = startCkdaPublisher(windowRef, roots, {
           now,
           cooldowns,
           premiumState: () => premium.state(),
-          beforeSnapshot() { updateHooks(); premium.refresh(); }
+          beforeSnapshot() {
+            updateHooks();
+            premium.refresh();
+            try { ringOverride.refresh(); } catch (_) { /* The native ring renderer can retry next update. */ }
+            try { titleOverride.refresh(); } catch (_) { /* A rebuilding nameplate can retry next update. */ }
+          }
         });
         if (pollTimer !== null) windowRef.clearInterval(pollTimer);
         pollTimer = null;

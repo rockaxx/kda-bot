@@ -5,7 +5,7 @@
   const api = root.__SA_BOT_ISOLATED_V1__;
   const requiredApi = [
     "createCkdaBridge", "createCkdaCanvas", "createMonotonicEpochClock",
-    "normalizeCkdaSettings", "normalizeDesignSettings", "normalizeLoadingImage",
+    "normalizeCkdaSettings", "normalizeDesignSettings", "normalizeLoadingImage", "createShipCatalog",
     "readLoadingImageFile", "validateCkdaSnapshot"
   ];
   // An unpacked extension can briefly run new files with its previously
@@ -88,7 +88,8 @@
   renewLease();
   if (unloaded) return;
 
-  api.whenDocumentReady(document, () => {
+  function initialize(shipCatalog) {
+    if (unloaded) return;
     chrome.storage.local.get(["settings", "ckdaSettings", "designSettings", "loadingScreenImage"], (stored = {}) => {
     if (unloaded) return;
     let normalized = api.normalizeSettings(stored.settings || {});
@@ -100,7 +101,7 @@
     let snapshot = null;
     let runtime = null;
     let ckdaSettings = api.normalizeCkdaSettings(stored.ckdaSettings || {}).value;
-    let designSettings = api.normalizeDesignSettings(stored.designSettings || {}).value;
+    let designSettings = api.normalizeDesignSettings(stored.designSettings || {}, shipCatalog).value;
     let loadingScreenImage = api.normalizeLoadingImage(stored.loadingScreenImage).value;
     let ckdaSaving = false;
     // An unavailable adapter stays closed until discovery explicitly reports ready.
@@ -147,6 +148,14 @@
       return ok;
     }
 
+    function configureDesign() {
+      const { rankId, ringLevel, shipDesign, titleText, titleColor } = designSettings;
+      ckdaBridge.sendCommand("set-design-rank", { rankId });
+      ckdaBridge.sendCommand("set-design-rings", { ringLevel });
+      ckdaBridge.sendCommand("set-design-ship", { shipDesign });
+      ckdaBridge.sendCommand("set-design-title", { titleText, titleColor });
+    }
+
     function configureCkda() {
       ckdaBridge.sendCommand("configure-effects", {
         empCooldownMs: ckdaSettings.empCooldownMs,
@@ -154,8 +163,7 @@
       });
       ckdaBridge.sendCommand("configure-refresh", { fps: ckdaSettings.refreshFps });
       ckdaBridge.sendCommand("set-premium", { enabled: ckdaSettings.premiumOverride });
-      ckdaBridge.sendCommand("set-design-rank", { rankId: designSettings.rankId });
-      ckdaBridge.sendCommand("set-design-ship", { shipDesign: designSettings.shipDesign });
+      configureDesign();
       ckdaBridge.sendCommand("refresh");
     }
 
@@ -258,18 +266,16 @@
         ckdaCanvas?.render(ckdaSnapshot, ckdaSettings);
         return true;
       },
+      shipCatalog,
       async onSaveDesign(rawSettings) {
         if (unloaded) return false;
-        const candidate = api.normalizeDesignSettings(rawSettings);
+        const candidate = api.normalizeDesignSettings(rawSettings, shipCatalog);
         if (!candidate.ok) return false;
         try {
           await chrome.storage.local.set({ designSettings: { ...candidate.value } });
           if (unloaded) return false;
           designSettings = candidate.value;
-          return ckdaAction(() => {
-            ckdaBridge.sendCommand("set-design-rank", { rankId: designSettings.rankId });
-            ckdaBridge.sendCommand("set-design-ship", { shipDesign: designSettings.shipDesign });
-          });
+          return ckdaAction(configureDesign);
         } catch (_) {
           return false;
         }
@@ -411,5 +417,9 @@
       }
     };
     });
+  }
+  api.whenDocumentReady(document, () => {
+    if (api.designCatalogReady) api.designCatalogReady.then(models => initialize(api.createShipCatalog(models)));
+    else initialize(api.createShipCatalog(null));
   });
 })(typeof window === "object" ? window : null);

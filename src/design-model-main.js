@@ -5,6 +5,7 @@
     Object.assign(root.__SA_BOT_MAIN_V1__, api);
     const mark = Symbol.for("kda-model-interceptor-v1");
     if (!root[mark]) root[mark] = api.installModelInterceptor(root);
+    root.__SA_BOT_MAIN_V1__.hasDesignModel = root[mark].hasModel;
   }
 })(typeof window === "object" ? window : null, function createApi() {
   "use strict";
@@ -37,13 +38,13 @@
 
   function installModelInterceptor(windowRef, options = {}) {
     if (!windowRef || typeof windowRef.fetch !== "function" || typeof windowRef.addEventListener !== "function") {
-      return { cleanup() { return false; } };
+      return { cleanup() { return false; }, hasModel() { return false; } };
     }
     const nativeFetch = windowRef.fetch;
     const waitMs = Number.isFinite(options.configWaitMs) && options.configWaitMs >= 0 ? options.configWaitMs : 1500;
     let active = true;
-    let shipDesign = "default";
     let packagedModels = null;
+    let modelsServed = false;
     let configReceived = false;
     let resolveConfig;
     const configReady = new Promise((resolve) => { resolveConfig = resolve; });
@@ -51,9 +52,7 @@
     function onMessage(event) {
       const data = event?.data;
       if (event.source !== windowRef || !data || data.channel !== CHANNEL ||
-          (data.shipDesign !== "default" && data.shipDesign !== "bastion") ||
-          !validModels(data.models) || Object.keys(data).length !== 3) return;
-      shipDesign = data.shipDesign;
+          !validModels(data.models) || Object.keys(data).length !== 2 || configReceived) return;
       packagedModels = clone(data.models);
       configReceived = true;
       resolveConfig();
@@ -80,18 +79,27 @@
       if (!modelRequestUrl(args[0], windowRef.location?.href)) return Reflect.apply(nativeFetch, this, args);
       await waitForConfig();
       if (!packagedModels) return Reflect.apply(nativeFetch, this, args);
-      const data = clone(packagedModels);
-      if (shipDesign === "bastion") data.ships[31] = clone(data.ships[2]);
       const ResponseCtor = windowRef.Response || Response;
-      return new ResponseCtor(JSON.stringify(data), {
+      const response = new ResponseCtor(JSON.stringify(packagedModels), {
         status: 200,
         headers: { "content-type": "application/json" }
       });
+      modelsServed = true;
+      return response;
     }
 
     windowRef.addEventListener("message", onMessage);
     windowRef.fetch = interceptedFetch;
-    return { cleanup };
+    return {
+      cleanup,
+      hasModel(id) {
+        if (!active) return false;
+        // ZIP-based game mods can supply the catalog without making a fetch.
+        const loadedShips = windowRef.Models?.ships;
+        const ships = loadedShips || (modelsServed ? packagedModels?.ships : null);
+        return typeof ships?.[id]?.path === "string";
+      }
+    };
   }
 
   return { installModelInterceptor, modelRequestUrl };

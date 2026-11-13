@@ -1,10 +1,9 @@
 (function expose(root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
-  if (root && typeof chrome === "object" && chrome.storage?.local && chrome.runtime?.getURL) {
-    api.publishDesignBootstrap({
+  if (root && typeof chrome === "object" && chrome.runtime?.getURL) {
+    root.__SA_BOT_ISOLATED_V1__.designCatalogReady = api.publishDesignBootstrap({
       windowRef: root,
-      storageArea: chrome.storage.local,
       runtimeGetUrl: chrome.runtime.getURL.bind(chrome.runtime),
       fetchFn: root.fetch.bind(root)
     });
@@ -17,30 +16,18 @@
       value.ships && typeof value.ships === "object" && value.ships[2] && value.ships[31]);
   }
 
-  function readStorage(storageArea) {
-    return new Promise((resolve, reject) => {
-      try { storageArea.get(["designSettings"], resolve); } catch (error) { reject(error); }
-    });
-  }
-
-  async function publishDesignBootstrap({ windowRef, storageArea, runtimeGetUrl, fetchFn } = {}) {
+  async function publishDesignBootstrap({ windowRef, runtimeGetUrl, fetchFn } = {}) {
     if (!windowRef || typeof windowRef.postMessage !== "function" ||
-        !storageArea || typeof storageArea.get !== "function" ||
-        typeof runtimeGetUrl !== "function" || typeof fetchFn !== "function") return false;
+        typeof runtimeGetUrl !== "function" || typeof fetchFn !== "function") return null;
     try {
-      const [stored, response] = await Promise.all([
-        readStorage(storageArea),
-        fetchFn(runtimeGetUrl("assets/Models.steam.json"))
-      ]);
-      if (!response?.ok || typeof response.json !== "function") return false;
+      const response = await fetchFn(runtimeGetUrl("assets/Models.steam.json"));
+      if (!response?.ok || typeof response.json !== "function") return null;
       const models = await response.json();
-      if (!validModels(models)) return false;
-      const raw = stored?.designSettings?.shipDesign;
-      const shipDesign = raw === "bastion" ? "bastion" : "default";
-      windowRef.postMessage({ channel: "sa-design-bootstrap-v1", shipDesign, models }, "*");
-      return true;
+      if (!validModels(models)) return null;
+      windowRef.postMessage({ channel: "sa-design-bootstrap-v1", models }, "*");
+      return models.ships;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 

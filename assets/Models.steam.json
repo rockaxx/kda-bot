@@ -338,6 +338,7 @@
         "247": {"path": "ships/citaSpooky", "end": 63, "start": 0, "isWebp": false, "preload": true, "unload": false, "isSingleFile": true, "customExtension": null, "useAtlas": true},
         "248": {"path": "ships/aegisSpooky", "end": 63, "start": 0, "isWebp": false, "preload": true, "unload": false, "isSingleFile": true, "customExtension": null, "useAtlas": true},
         "249": {"path": "ships/nSpooky", "end": 63, "start": 0, "isWebp": false, "preload": true, "unload": false, "isSingleFile": true, "customExtension": null, "useAtlas": true},
+        "250": {"path": "ships/gyellow", "end": 63, "start": 0, "isWebp": false, "preload": true, "unload": false, "isSingleFile": true, "customExtension": null, "useAtlas": true},
         "1000": {"path":"ships/cup", "end": 30, "start": 0, "isWebp": true, "preload": true, "unload": false, "isSingleFile": true, "customExtension": null, "useAtlas": true},
         "1100": {"path":"ships/weaponPlatform", "end": 0, "start": 0, "isWebp": false, "preload": true, "unload": false, "isSingleFile": false, "customExtension": null, "useAtlas": false}
     },
